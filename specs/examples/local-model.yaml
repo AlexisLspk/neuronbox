@@ -1,0 +1,24 @@
+# Modèle sur disque : dossier type Hugging Face, adaptateur LoRA, ou fichier unique.
+name: projet-weights-locaux
+version: "1.0"
+
+model:
+  # Chemin relatif au répertoire du neuron.yaml, ou absolu, ou ~/models/...
+  name: ./my-model-snapshot
+  source: local
+
+runtime:
+  python: "3.11"
+  cuda: "12.1"
+  packages:
+    - transformers==4.40.0
+    - peft==0.10.0
+
+gpu:
+  min_vram: 8gb
+  strategy: single
+
+entrypoint: train.py
+
+env:
+  BATCH_SIZE: "2"

@@ -1,0 +1,25 @@
+name: demo-finetune
+version: "1.0"
+
+model:
+  name: meta-llama/Meta-Llama-3-8B-Instruct
+  source: huggingface
+
+runtime:
+  python: "3.11"
+  cuda: "12.1"
+  packages:
+    - transformers==4.40.0
+    - peft==0.10.0
+    - datasets==2.19.0
+    - trl==0.8.6
+
+gpu:
+  min_vram: 16gb
+  strategy: single
+
+entrypoint: train.py
+
+env:
+  HF_TOKEN: "${HF_TOKEN}"
+  BATCH_SIZE: "4"

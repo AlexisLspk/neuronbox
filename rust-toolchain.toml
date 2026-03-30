@@ -1,0 +1,3 @@
+[toolchain]
+channel = "stable"
+# CI installe rustfmt + clippy. En local : rustup component add rustfmt clippy

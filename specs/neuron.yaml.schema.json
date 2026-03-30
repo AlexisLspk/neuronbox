@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neuronbox.dev/schemas/neuron.yaml",
+  "title": "neuron.yaml",
+  "type": "object",
+  "required": ["name", "model", "runtime", "entrypoint"],
+  "properties": {
+    "name": { "type": "string" },
+    "version": { "type": "string" },
+    "model": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "source": {
+          "type": "string",
+          "enum": [
+            "huggingface",
+            "local",
+            "s3",
+            "hf",
+            "hub",
+            "path",
+            "filesystem",
+            "disk"
+          ]
+        },
+        "quantization": { "type": ["string", "null"] }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["python"],
+      "properties": {
+        "python": { "type": "string" },
+        "mode": { "type": "string", "enum": ["host", "oci"] },
+        "cuda": { "type": ["string", "null"] },
+        "packages": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "container": {
+      "type": "object",
+      "properties": {
+        "image": { "type": ["string", "null"] },
+        "executor": { "type": "string", "enum": ["docker", "runc"] }
+      }
+    },
+    "gpu": {
+      "type": "object",
+      "properties": {
+        "min_vram": { "type": "string" },
+        "strategy": { "type": "string", "enum": ["single", "pipeline", "tensor"] }
+      }
+    },
+    "entrypoint": { "type": "string" },
+    "env": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    }
+  }
+}

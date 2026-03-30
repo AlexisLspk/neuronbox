@@ -1,0 +1,23 @@
+name: demo-inference
+version: "1.0"
+
+model:
+  name: meta-llama/Meta-Llama-3-8B-Instruct
+  source: huggingface
+  quantization: q4_k_m
+
+runtime:
+  python: "3.11"
+  cuda: "12.1"
+  packages:
+    - transformers==4.40.0
+    - accelerate==0.29.3
+
+gpu:
+  min_vram: 10gb
+  strategy: single
+
+entrypoint: infer.py
+
+env:
+  HF_TOKEN: "${HF_TOKEN}"
