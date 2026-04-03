@@ -2,6 +2,7 @@
 name = "neuronbox"
 version = "0.1.0"
 description = "Optional Python client for the NeuronBox Unix-socket daemon"
+license = "AGPL-3.0-only"
 requires-python = ">=3.10"
 dependencies = []
 

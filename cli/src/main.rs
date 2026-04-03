@@ -38,7 +38,7 @@ and a Unix-socket daemon (neurond) for sessions, stats, and soft VRAM hints on N
 Environment: NEURONBOX_SOCKET (daemon socket path), NEUROND_PATH (neurond binary if not next to neuron).";
 
 const AFTER_HELP: &str = "\
-Quick start:\n  neuron              Open the welcome screen\n  neuron init         Create neuron.yaml\n  neuron pull <id>    Fetch a model\n  neuron run          Run the project entrypoint\n  neuron dashboard    Terminal UI for sessions + GPU summary\n  neuron help         Full command list";
+Quick start:\n  neuron              Open the welcome screen\n  neuron init         Create neuron.yaml\n  neuron pull <id>    Fetch a model\n  neuron run          Run the project entrypoint\n  neuron dashboard    Terminal UI for sessions + GPU summary\n  neuron dashboard --demo   Mock sessions + synthetic VRAM (Unix)\n  neuron help         Full command list";
 
 #[derive(Parser)]
 #[command(
@@ -91,7 +91,7 @@ enum Commands {
     Run {
         #[arg(long, short = 'f', value_name = "PATH")]
         file: Option<PathBuf>,
-        /// `CUDA_VISIBLE_DEVICES` (ex. `0` ou `0,1`).
+        /// `CUDA_VISIBLE_DEVICES` (e.g. `0` or `0,1`).
         #[arg(long)]
         gpu: Option<String>,
         #[arg(long, value_name = "12gb")]
@@ -110,8 +110,12 @@ enum Commands {
     },
     /// VRAM and sessions registered with the daemon.
     Stats,
-    /// Local terminal dashboard (ratatui), ~1 s refresh.
-    Dashboard,
+    /// Local terminal dashboard (ratatui); stats ~10 Hz, host/GPU probe ~1 Hz.
+    Dashboard {
+        /// Fake sessions + synthetic VRAM overlay (Unix). Sets VRAM watch off for spawned neurond.
+        #[arg(long)]
+        demo: bool,
+    },
     /// Model registry in the store.
     Model {
         #[command(subcommand)]
@@ -165,7 +169,7 @@ async fn main() -> Result<()> {
             quantization,
         }) => swap::swap(&model, quantization).await,
         Some(Commands::Stats) => stats::stats().await,
-        Some(Commands::Dashboard) => dashboard::run().await,
+        Some(Commands::Dashboard { demo }) => dashboard::run(demo).await,
         Some(Commands::Model { cmd }) => model::model(cmd),
         Some(Commands::Daemon) => run_daemon_foreground(),
         Some(Commands::Serve { file }) => serve::serve(file).await,

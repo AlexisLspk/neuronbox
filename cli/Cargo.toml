@@ -3,10 +3,16 @@ name = "neuronbox-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+readme.workspace = true
+description.workspace = true
+keywords.workspace = true
+categories.workspace = true
+authors.workspace = true
 
 [features]
 default = []
-# Active NVML côté runtime (Linux NVIDIA) ; sans effet utile sur macOS.
+# Enable NVML in the runtime (Linux NVIDIA); little effect on macOS.
 nvml = ["neuronbox-runtime/nvml"]
 
 [[bin]]
@@ -14,12 +20,12 @@ name = "neuron"
 path = "src/main.rs"
 
 [dependencies]
-neuronbox-runtime = { path = "../runtime" }
+neuronbox-runtime = { version = "0.1.0", path = "../runtime" }
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 dirs = "5"
 hex = "0.4"
-hf-hub = "0.3"
+hf-hub = "0.5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"

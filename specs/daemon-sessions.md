@@ -1,72 +1,73 @@
-# Contrat daemon : sessions et `neuron stats`
+# Daemon contract: sessions and `neuron stats`
 
-Le daemon `neurond` écoute sur un socket Unix (défaut : `~/.neuronbox/neuron.sock`, surcharge possible avec `NEURONBOX_SOCKET`). Protocole : **une ligne JSON par requête**, une ligne JSON par réponse.
+The `neurond` daemon listens on a Unix socket (default: `~/.neuronbox/neuron.sock`, override with `NEURONBOX_SOCKET`). Protocol: **one JSON line per request**, one JSON line per response.
 
-Les types exacts sont définis en Rust dans `runtime/src/protocol.rs` (`DaemonRequest` / `DaemonResponse`), avec `#[serde(tag = "method")]` et `rename_all = "snake_case"`.
+Exact types are defined in Rust in `runtime/src/protocol.rs` (`DaemonRequest` / `DaemonResponse`), with `#[serde(tag = "method")]` and `rename_all = "snake_case"`.
 
-## Enregistrer une session (`neuron run`)
+## Registering a session (`neuron run`)
 
-`neuron run` envoie après le lancement du processus Python :
+After starting the Python process, `neuron run` sends:
 
 ```json
 {
   "method": "register_session",
-  "name": "nom-du-projet",
+  "name": "project-name",
   "estimated_vram_mb": 8192,
   "pid": 12345,
   "tokens_per_sec": null
 }
 ```
 
-- **`estimated_vram_mb`** : estimation utilisée pour la surveillance soft NVIDIA (Linux), pas une réservation matérielle.
-- **`tokens_per_sec`** : optionnel ; peut être omis ou `null` si inconnu.
+- **`estimated_vram_mb`**: estimate used for soft NVIDIA monitoring (Linux), not a hardware reservation.
+- **`tokens_per_sec`**: optional; may be omitted or `null` if unknown.
 
-À la fin du processus, la CLI envoie `unregister_session` avec le même `pid`.
+When the process exits, the CLI sends `unregister_session` with the same `pid`.
 
-## Mettre à jour les tokens/s depuis votre code
+## Updating tokens/s from your code
 
-Le registre est indexé par **`pid`** : un nouvel appel `register_session` avec le **même** `pid` **remplace** la ligne existante (même nom, nouvelle estimation, nouveau débit).
+The registry is keyed by **`pid`**: a new `register_session` call with the **same** `pid` **replaces** the existing row (same name, new estimate, new throughput).
 
-Pour afficher une valeur dans `neuron stats`, renvoyez périodiquement par exemple :
+To show a value in `neuron stats`, send periodically for example:
 
 ```json
 {
   "method": "register_session",
-  "name": "mon-inference",
+  "name": "my-inference",
   "estimated_vram_mb": 12000,
   "pid": 12345,
   "tokens_per_sec": 47.3
 }
 ```
 
-### Script d’exemple
+### Minimal client
 
-Le dépôt fournit [`cli/scripts/neuronbox_daemon_session.py`](../cli/scripts/neuronbox_daemon_session.py) (`ping`, `register`) utilisant uniquement la bibliothèque standard Python.
+Open the Unix socket in line mode (one JSON request + `\n` per line, one response per line), e.g. with `socat` or a small Python `socket` stdlib script; payloads are as documented here and in `runtime/src/protocol.rs`.
 
-## Autres méthodes utiles
+## Other useful methods
 
-| `method`           | Rôle |
+| `method`           | Role |
 |--------------------|------|
-| `ping`             | Santé du daemon → `pong` |
-| `list_sessions`    | Liste des `SessionInfo` |
-| `stats`            | Sessions + processus compute NVIDIA (NVML si build `nvml`, sinon `nvidia-smi`) |
-| `version`          | Négociation de version de protocole (`v` entier) |
+| `ping`             | Daemon health → `pong` |
+| `list_sessions`    | List of `SessionInfo` |
+| `stats`            | Sessions + NVIDIA compute processes (NVML if built with `nvml`, else `nvidia-smi`) + **`active_model`** (swap) + **`vram_used_by_pid`**: real MiB per PID (compute apps) |
+| `version`          | Protocol version negotiation (`v` integer) |
 
-## Session persistante (plusieurs requêtes)
+## Persistent session (multiple requests)
 
-Le serveur (`runtime/src/server.rs`) lit des lignes JSON en boucle sur **une même connexion** jusqu’à EOF. Un client peut donc :
+The server (`runtime/src/server.rs`) reads JSON lines in a loop on **one connection** until EOF. A client can:
 
-1. Ouvrir le socket une fois ;
-2. Écrire une ligne JSON (requête) + `\n` ;
-3. Lire une ligne JSON (réponse) ;
-4. Répéter 2–3 sans reconnecter ;
-5. Fermer le socket quand terminé.
+1. Open the socket once;
+2. Write one JSON line (request) + `\n`;
+3. Read one JSON line (response);
+4. Repeat 2–3 without reconnecting;
+5. Close the socket when done.
 
-La CLI Rust expose cela via `DaemonSession` dans `cli/src/daemon_client.rs` (`connect`, puis `request` en boucle). L’helper `request()` sans session reste disponible pour un aller-retour unique.
+The Rust CLI exposes this via `DaemonSession` in `cli/src/daemon_client.rs` (`connect`, then `request` in a loop). The `request()` helper without a session remains available for a single round trip.
 
-Le script Python d’exemple ouvre encore une connexion par commande ; pour une session longue en Python, garder le socket ouvert et enchaîner les lignes comme ci-dessus.
+For a Python or other client, keep the socket open and chain lines as above rather than reconnecting for every request.
 
-## Limites actuelles
+## Current limitations
 
-- Pas de chiffrement : trafic local uniquement (socket Unix).
-- `tokens_per_sec` n’est pas agrégé dans le temps côté daemon : c’est la **dernière** valeur enregistrée pour ce PID.
+- No encryption: local traffic only (Unix socket).
+- `tokens_per_sec` is not time-aggregated in the daemon: it is the **last** value recorded for that PID.
+- **`neuron dashboard`** chart history is rebuilt **in the CLI** (~1 s samples), not stored in the daemon.

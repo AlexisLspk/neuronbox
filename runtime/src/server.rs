@@ -7,7 +7,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 
 use crate::gpu_manager::GpuManager;
-use crate::host::compute_apps_display_lines;
+use crate::host::{compute_apps_display_lines, compute_apps_pid_memory_mb};
 use crate::model_loader::ModelLoader;
 use crate::protocol::{DaemonRequest, DaemonResponse, SessionInfo, SWAP_SIGNAL_FILE_VERSION};
 use crate::vram_watch;
@@ -75,6 +75,14 @@ pub async fn run_socket_server(
     }
     let listener = UnixListener::bind(socket_path)
         .with_context(|| format!("bind unix socket {:?}", socket_path))?;
+
+    // Restrict socket permissions to owner only (security: local user isolation)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o600))
+            .with_context(|| format!("chmod 600 {:?}", socket_path))?;
+    }
 
     if !vram_watch_disabled() {
         let gm_watch = gpu_manager.clone();
@@ -205,7 +213,7 @@ async fn dispatch(
         }
         DaemonRequest::Stats => {
             let sessions = gpu_manager.list().await;
-            let gpu_lines = nvidia_smi_compact().await;
+            let (gpu_lines, vram_used_by_pid) = nvidia_stats_bundle().await;
             let note = if gpu_lines.is_empty() {
                 Some(
                     "tokens/s are shown only when the session reports them (RegisterSession)."
@@ -214,10 +222,21 @@ async fn dispatch(
             } else {
                 None
             };
+            let am = model_loader.get().await;
+            let active_model = if am.model_ref.is_empty() {
+                None
+            } else {
+                Some(crate::protocol::ActiveModelInfo {
+                    model_ref: am.model_ref,
+                    quantization: am.quantization,
+                })
+            };
             DaemonResponse::Stats {
                 sessions,
                 gpu_lines,
                 note,
+                active_model,
+                vram_used_by_pid,
             }
         }
         DaemonRequest::SwapModel {
@@ -251,8 +270,12 @@ async fn dispatch(
     }
 }
 
-async fn nvidia_smi_compact() -> Vec<String> {
-    tokio::task::spawn_blocking(compute_apps_display_lines)
-        .await
-        .unwrap_or_default()
+async fn nvidia_stats_bundle() -> (Vec<String>, std::collections::HashMap<u32, u64>) {
+    tokio::task::spawn_blocking(|| {
+        let lines = compute_apps_display_lines();
+        let map = compute_apps_pid_memory_mb().unwrap_or_default();
+        (lines, map)
+    })
+    .await
+    .unwrap_or_else(|_| (Vec::new(), std::collections::HashMap::new()))
 }

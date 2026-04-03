@@ -5,6 +5,10 @@ members = ["cli", "runtime"]
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/neuronbox/neuronbox"
+license = "AGPL-3.0-only"
+repository = "https://github.com/AlexisLspk/neuronbox"
 readme = "README.md"
+description = "Local ML runner: declarative neuron.yaml, model store, daemon, and terminal dashboard"
+keywords = ["ml", "ai", "gpu", "pytorch", "inference"]
+categories = ["command-line-utilities", "development-tools"]
+authors = ["Alexis Lascou--Prokop <neuronbox.contact@proton.me>"]

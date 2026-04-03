@@ -18,4 +18,4 @@ Short operational and trust boundaries for local use.
 
 ## Reporting
 
-For vulnerabilities in this repository, prefer private disclosure to maintainers (see repository contact if published).
+For vulnerabilities, prefer **private** disclosure to **neuronbox.contact@proton.me** (do not open a public issue for undisclosed exploits). Include steps to reproduce and affected versions if known.

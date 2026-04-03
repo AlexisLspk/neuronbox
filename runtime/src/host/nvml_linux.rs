@@ -1,5 +1,5 @@
-//! NVML (Linux + NVIDIA) : une sonde pour liste GPU, VRAM par PID et lignes d’affichage.
-//! Repli : `nvidia.rs` utilise `nvidia-smi` si ce module n’est pas compilé ou si `try_snapshot` échoue.
+//! NVML (Linux + NVIDIA): probe for GPU list, VRAM per PID, and display lines.
+//! Fallback: `nvidia.rs` uses `nvidia-smi` if this module is not built or `try_snapshot` fails.
 
 use std::collections::HashMap;
 
@@ -23,7 +23,7 @@ fn proc_comm(pid: u32) -> String {
         .unwrap_or_else(|| "?".to_string())
 }
 
-/// `None` si NVML indisponible (pas de pilote, pas de GPU, erreur d’init).
+/// `None` if NVML is unavailable (no driver, no GPU, init error).
 pub fn try_snapshot() -> Option<NvmlSnapshot> {
     let nvml = Nvml::init().ok()?;
     let n = nvml.device_count().ok()?;

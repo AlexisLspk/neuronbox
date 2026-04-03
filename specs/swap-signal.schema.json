@@ -1,27 +1,27 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://neuronbox.dev/schemas/swap-signal.json",
+  "$id": "https://raw.githubusercontent.com/AlexisLspk/neuronbox/main/specs/swap-signal.schema.json",
   "title": "swap_signal.json",
-  "description": "Écrit par neurond dans ~/.neuronbox/swap_signal.json quand le client envoie SwapModel. Lu par serve_worker.py (neuron serve).",
+  "description": "Written by neurond to ~/.neuronbox/swap_signal.json when the client sends SwapModel. Read by serve_worker.py (neuron serve).",
   "type": "object",
   "required": ["signal_version", "model_ref", "ts"],
   "properties": {
     "signal_version": {
       "type": "integer",
-      "description": "Version du format ; incrémenter en cas de changement incompatible.",
+      "description": "Format version; bump on incompatible changes.",
       "minimum": 1
     },
     "model_ref": {
       "type": "string",
-      "description": "Identifiant Hugging Face ou référence logique passée à neuron swap."
+      "description": "Hugging Face id or logical reference passed to neuron swap."
     },
     "quantization": {
       "type": ["string", "null"],
-      "description": "Optionnel, ex. q4_k_m."
+      "description": "Optional, e.g. q4_k_m."
     },
     "ts": {
       "type": "integer",
-      "description": "Horodatage Unix (secondes) à l’écriture du fichier."
+      "description": "Unix timestamp (seconds) when the file was written."
     }
   },
   "additionalProperties": true

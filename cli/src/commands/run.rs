@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use neuronbox_runtime::gpu::soft_vram_check;
@@ -14,7 +14,7 @@ use crate::model_alias;
 use crate::model_resolve::{self, use_local_filesystem};
 use crate::neuron_config::NeuronConfig;
 use crate::oci;
-use crate::paths::{neuronbox_home, store_root};
+use crate::paths::{neuronbox_home, project_dir_from_yaml, store_root};
 
 pub struct RunArgs {
     pub yaml: Option<PathBuf>,
@@ -39,10 +39,7 @@ pub async fn run_project(args: RunArgs) -> Result<()> {
         anyhow::bail!("{:?} not found.", yaml_path);
     }
     let cfg = NeuronConfig::load_path(&yaml_path)?;
-    let cwd = yaml_path
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."));
+    let cwd = project_dir_from_yaml(&yaml_path);
 
     let hf_repo_id = model_alias::resolve_for_hf_id(&cfg.model.name);
     if !use_local_filesystem(&cfg) {
@@ -150,6 +147,11 @@ pub async fn run_project(args: RunArgs) -> Result<()> {
     if let Some(s) = pytorch_alloc_env(&cfg) {
         cmd.env("PYTORCH_CUDA_ALLOC_CONF", s);
     }
+    cmd.env("NEURONBOX_SESSION_NAME", &cfg.name);
+    cmd.env("NEURONBOX_SESSION_VRAM_MB", format!("{est_mb}"));
+    if !cfg.env.contains_key("PYTHONPATH") {
+        cmd.env_remove("PYTHONPATH");
+    }
     for (k, v) in &cfg.env {
         cmd.env(k, v);
     }
@@ -157,17 +159,24 @@ pub async fn run_project(args: RunArgs) -> Result<()> {
     let mut child = cmd.spawn().context("spawn Python")?;
     let pid = child.id().expect("pid");
 
-    let _ = daemon_client::request(DaemonRequest::RegisterSession {
+    if let Err(e) = daemon_client::request(DaemonRequest::RegisterSession {
         name: cfg.name.clone(),
         estimated_vram_mb: est_mb,
         pid,
         tokens_per_sec: None,
     })
-    .await;
+    .await
+    {
+        eprintln!(
+            "neuron: warning — RegisterSession failed (dashboard may not show this run): {e:#}"
+        );
+    }
 
     let status = child.wait().await.context("wait for process")?;
 
-    let _ = daemon_client::request(DaemonRequest::UnregisterSession { pid }).await;
+    if let Err(e) = daemon_client::request(DaemonRequest::UnregisterSession { pid }).await {
+        eprintln!("neuron: warning — UnregisterSession failed: {e:#}");
+    }
 
     if !status.success() {
         anyhow::bail!("process exited with code {:?}", status.code());

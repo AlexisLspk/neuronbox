@@ -3,10 +3,16 @@ name = "neuronbox-runtime"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+readme.workspace = true
+description.workspace = true
+keywords.workspace = true
+categories.workspace = true
+authors.workspace = true
 
 [features]
 default = []
-# Linux NVIDIA : NVML (libnvidia-ml.so) avec repli nvidia-smi si indisponible.
+# Linux NVIDIA: NVML (libnvidia-ml.so) with nvidia-smi fallback if unavailable.
 nvml = ["dep:nvml-wrapper"]
 
 [lib]

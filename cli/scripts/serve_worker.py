@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Worker minimal pour `neuron serve` : charge optionnellement un modèle HF et écoute swap_signal.json.
+"""Minimal worker for `neuron serve`: optionally loads an HF model and watches swap_signal.json.
 
-Contrat du fichier signal : specs/swap-signal.schema.json
-- signal_version : entier ; version actuelle = 1. Si absent, traité comme 1 (rétrocompat).
-- Si signal_version > 1 : le worker journalise et ignore le swap (éviter comportement indéfini).
+Signal file contract: specs/swap-signal.schema.json
+- signal_version: integer; current version = 1. If missing, treated as 1 (backward compatible).
+- If signal_version > 1: the worker logs and ignores the swap (avoid undefined behavior).
 """
 from __future__ import annotations
 
@@ -18,15 +18,15 @@ SUPPORTED_SIGNAL_VERSION = 1
 def signal_version_ok(data: dict) -> bool:
     v = data.get("signal_version", 1)
     if not isinstance(v, int):
-        print("[neuronbox serve] signal_version invalide, ignoré", flush=True)
+        print("[neuronbox serve] invalid signal_version, ignored", flush=True)
         return False
     if v < 1:
-        print("[neuronbox serve] signal_version < 1, ignoré", flush=True)
+        print("[neuronbox serve] signal_version < 1, ignored", flush=True)
         return False
     if v > SUPPORTED_SIGNAL_VERSION:
         print(
-            f"[neuronbox serve] signal_version {v} non prise en charge "
-            f"(max {SUPPORTED_SIGNAL_VERSION}), swap ignoré",
+            f"[neuronbox serve] signal_version {v} not supported "
+            f"(max {SUPPORTED_SIGNAL_VERSION}), swap ignored",
             flush=True,
         )
         return False
@@ -52,9 +52,9 @@ def main() -> None:
                 device_map="auto" if torch.cuda.is_available() else None,
                 trust_remote_code=True,
             )
-            print("[neuronbox serve] modèle chargé.", flush=True)
+            print("[neuronbox serve] model loaded.", flush=True)
         except Exception as e:
-            print("[neuronbox serve] import/chargement optionnel échoué:", e, flush=True)
+            print("[neuronbox serve] optional import/load failed:", e, flush=True)
 
     last_blob = None
     while True:
@@ -67,7 +67,7 @@ def main() -> None:
                     if not signal_version_ok(data):
                         time.sleep(1)
                         continue
-                    print("[neuronbox serve] signal swap:", data, flush=True)
+                    print("[neuronbox serve] swap signal:", data, flush=True)
                     ref = data.get("model_ref")
                     if model is not None and ref:
                         try:
@@ -81,9 +81,9 @@ def main() -> None:
                                 device_map="auto" if torch.cuda.is_available() else None,
                                 trust_remote_code=True,
                             )
-                            print("[neuronbox serve] rechargé depuis HF:", ref, flush=True)
+                            print("[neuronbox serve] reloaded from HF:", ref, flush=True)
                         except Exception as e:
-                            print("[neuronbox serve] swap HF échoué:", e, flush=True)
+                            print("[neuronbox serve] HF swap failed:", e, flush=True)
             except (OSError, json.JSONDecodeError):
                 pass
         time.sleep(1)

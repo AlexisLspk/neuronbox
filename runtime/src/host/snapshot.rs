@@ -1,8 +1,8 @@
-//! Schéma sérialisable de l’état machine (GPU / plateforme) pour debug CLI et décisions côté client.
+//! Serializable schema of machine state (GPU / platform) for CLI debug and client-side decisions.
 
 use serde::{Deserialize, Serialize};
 
-/// Version du schéma `HostSnapshot` (incrémenter si des champs incompatibles changent).
+/// `HostSnapshot` schema version (bump if incompatible fields change).
 pub const HOST_SNAPSHOT_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -13,11 +13,11 @@ pub struct PlatformInfo {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ProbeStatus {
-    /// `nvidia-smi --query-gpu=...` a réussi.
+    /// `nvidia-smi --query-gpu=...` succeeded.
     pub nvidia_smi_gpu_list: bool,
-    /// `nvidia-smi --query-compute-apps=pid,used_gpu_memory` a réussi (VRAM par PID).
+    /// `nvidia-smi --query-compute-apps=pid,used_gpu_memory` succeeded (VRAM per PID).
     pub nvidia_smi_compute: bool,
-    /// Liste GPU NVIDIA obtenue via **NVML** (feature `nvml`, Linux) plutôt que `nvidia-smi`.
+    /// NVIDIA GPU list from **NVML** (`nvml` feature, Linux) rather than `nvidia-smi`.
     #[serde(default)]
     pub nvml: bool,
     pub rocm_smi: bool,
@@ -30,7 +30,7 @@ pub enum TrainingBackend {
     Cuda,
     Rocm,
     Metal,
-    /// GPU présents mais backend non classé (rare).
+    /// GPUs present but backend not classified (rare).
     Cpu,
     Unknown,
 }
@@ -40,7 +40,7 @@ pub struct GpuRecord {
     pub index: u32,
     pub name: String,
     pub memory_total_mb: u64,
-    /// Ex. `CUDA (driver 535.x)` ou `ROCm` ou `Metal`.
+    /// E.g. `CUDA (driver 535.x)`, `ROCm`, or `Metal`.
     pub backend: String,
 }
 
@@ -54,8 +54,8 @@ pub struct HostSnapshot {
 }
 
 impl HostSnapshot {
-    /// VRAM « principale » pour les pré-checks : GPU NVIDIA d’index 0, sinon premier GPU ROCm avec VRAM connue.
-    /// `None` si inconnu ou nulle (ex. Apple sans taille VRAM exposée).
+    /// Primary VRAM for pre-checks: NVIDIA GPU at index 0, else first ROCm GPU with known VRAM.
+    /// `None` if unknown or zero (e.g. Apple with no exposed VRAM size).
     pub fn primary_vram_mb(&self) -> Option<u64> {
         for g in &self.gpus {
             if g.backend.contains("CUDA") && g.index == 0 && g.memory_total_mb > 0 {

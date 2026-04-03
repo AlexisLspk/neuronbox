@@ -1,50 +1,50 @@
-# VRAM, MIG et monitoring NeuronBox
+# VRAM, MIG, and NeuronBox monitoring
 
-## Contrôle « soft » avant lancement
+## Soft check before launch
 
-`neuron run` peut refuser de démarrer si `gpu.min_vram` dans `neuron.yaml` dépasse la VRAM totale estimée du GPU (NVIDIA via **NVML** si compilé avec la feature `nvml` sur Linux, sinon `nvidia-smi` ; AMD via `rocm-smi` quand disponible).
+`neuron run` may refuse to start if `gpu.min_vram` in `neuron.yaml` exceeds the estimated total GPU VRAM (NVIDIA via **NVML** when built with the `nvml` feature on Linux, else `nvidia-smi`; AMD via `rocm-smi` when available).
 
-## Surveillance pendant l’exécution (daemon)
+## Monitoring while running (daemon)
 
-`neurond` peut lancer une boucle qui obtient la mémoire utilisée par PID sur GPU NVIDIA (**NVML** si feature `nvml`, sinon `nvidia-smi`). Si un processus dépasse environ **115 %** de la valeur `estimated_vram_mb` enregistrée lors de `RegisterSession`, le daemon envoie **SIGKILL** au PID (Linux).
+`neurond` may run a loop that reads per-PID memory on NVIDIA GPUs (**NVML** if the `nvml` feature is enabled, else `nvidia-smi`). If a process exceeds about **115%** of the `estimated_vram_mb` value recorded at `RegisterSession`, the daemon sends **SIGKILL** to that PID (Linux).
 
-### Désactiver la surveillance VRAM (SIGKILL)
+### Disabling VRAM monitoring (SIGKILL)
 
-Pour désactiver cette boucle (par ex. environnements de test, machines sans GPU, ou politique locale) :
+To disable this loop (e.g. test environments, machines without GPU, or local policy):
 
 ```bash
 export NEURONBOX_DISABLE_VRAM_WATCH=1
-# valeurs reconnues : 1, true, yes (insensible à la casse)
+# accepted values: 1, true, yes (case-insensitive)
 neuron daemon
 ```
 
-Sans cette variable, le comportement par défaut reste inchangé.
+Without this variable, default behavior is unchanged.
 
-Ce n’est **pas** un plafond matériel : sans **MIG** (Multi-Instance GPU, NVIDIA datacenter) ou partitionnement équivalent, CUDA ne garantit pas un quota VRAM strict par processus comme pour la RAM système.
+This is **not** a hardware cap: without **MIG** (Multi-Instance GPU, NVIDIA datacenter) or equivalent partitioning, CUDA does not guarantee a strict per-process VRAM quota like system RAM.
 
 ## MIG (NVIDIA)
 
-Pour un **isolation forte** par instance GPU sur des cartes compatibles (A100, H100, etc.) :
+For **strong isolation** per GPU instance on supported cards (A100, H100, etc.):
 
-1. Configurer MIG via les outils NVIDIA du système (`nvidia-smi mig`).
-2. Exposer uniquement l’instance souhaitée avec `CUDA_VISIBLE_DEVICES` (souvent un UUID d’instance).
-3. Documenter dans votre déploiement qu’un job NeuronBox = une instance MIG.
+1. Configure MIG with NVIDIA system tools (`nvidia-smi mig`).
+2. Expose only the desired instance with `CUDA_VISIBLE_DEVICES` (often an instance UUID).
+3. Document in your deployment that one NeuronBox job = one MIG instance.
 
-NeuronBox ne configure pas MIG automatiquement ; la doc ici sert de point d’entrée.
+NeuronBox does not configure MIG automatically; this doc is an entry point.
 
-## Variables PyTorch injectées
+## Injected PyTorch variables
 
-En mode host ou via Docker OCI, NeuronBox peut définir `PYTORCH_CUDA_ALLOC_CONF` (par ex. `max_split_size_mb` dérivé de `gpu.min_vram`) pour limiter la fragmentation. C’est une **heuristique**, pas une garantie de pic VRAM.
+In host mode or via Docker OCI, NeuronBox may set `PYTORCH_CUDA_ALLOC_CONF` (e.g. `max_split_size_mb` derived from `gpu.min_vram`) to reduce fragmentation. This is a **heuristic**, not a guarantee on peak VRAM.
 
 ## NVML (Linux NVIDIA)
 
-- **Prérequis** : pilote NVIDIA installé (`libnvidia-ml.so` présent au runtime).
-- **Build** : `cargo build -p neuronbox-runtime --features nvml` ou `cargo build -p neuronbox-cli --features nvml` (réactive la même feature sur le runtime).
-- **`neuron host inspect`** : champ `probes.nvml` indique si la liste GPU NVIDIA a été obtenue via NVML (`true`) ou `nvidia-smi` (`false`).
-- En cas d’échec d’init NVML, le code **retombe** sur `nvidia-smi` (comportement inchangé sans feature).
+- **Prerequisite**: NVIDIA driver installed (`libnvidia-ml.so` present at runtime).
+- **Build**: `cargo build -p neuronbox-runtime --features nvml` or `cargo build -p neuronbox-cli --features nvml` (enables the same feature on the runtime).
+- **`neuron host inspect`**: field `probes.nvml` indicates whether the NVIDIA GPU list came from NVML (`true`) or `nvidia-smi` (`false`).
+- If NVML init fails, the code **falls back** to `nvidia-smi` (same as builds without the feature).
 
-Sur **macOS**, la feature compile mais le chemin NVML n’est pas utilisé (pas de module NVML dans la sonde) ; Apple GPU reste géré à part.
+On **macOS**, the feature compiles but the NVML path is not used (no NVML in the probe); Apple GPU is handled separately.
 
-## Multi-GPU et DDP
+## Multi-GPU and DDP
 
-Voir le guide dédié : [MULTI_GPU.md](MULTI_GPU.md) (`neuron run --gpu`, `torchrun`, champ `gpu.strategy`, feuille de route).
+See the dedicated guide: [MULTI_GPU.md](MULTI_GPU.md) (`neuron run --gpu`, `torchrun`, `gpu.strategy` field, roadmap).

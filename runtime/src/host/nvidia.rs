@@ -1,4 +1,4 @@
-//! NVIDIA : NVML sur Linux (feature `nvml`), sinon sous-processus `nvidia-smi`.
+//! NVIDIA: NVML on Linux (`nvml` feature), else `nvidia-smi` subprocess.
 
 use std::collections::HashMap;
 use std::process::Command;
@@ -8,13 +8,13 @@ use super::snapshot::GpuRecord;
 #[cfg(all(target_os = "linux", feature = "nvml"))]
 use super::nvml_linux;
 
-/// Résultat de la sonde liste GPU (NVIDIA).
+/// Result of the NVIDIA GPU list probe.
 #[derive(Debug, Clone)]
 pub struct NvidiaGpuListResult {
     pub gpus: Option<Vec<GpuRecord>>,
-    /// Outil NVIDIA a répondu (NVML ou `nvidia-smi`).
+    /// NVIDIA tool responded (NVML or `nvidia-smi`).
     pub probe_ok: bool,
-    /// Données issues de NVML (sinon `nvidia-smi`).
+    /// Data from NVML (otherwise `nvidia-smi`).
     pub used_nvml: bool,
 }
 
@@ -88,7 +88,7 @@ fn query_gpus_nvidia_smi() -> (Option<Vec<GpuRecord>>, bool) {
     }
 }
 
-/// PID → MiB utilisés (surveillance VRAM soft, stats).
+/// PID → used MiB (soft VRAM monitoring, stats).
 pub fn compute_apps_pid_memory_mb() -> Option<HashMap<u32, u64>> {
     #[cfg(all(target_os = "linux", feature = "nvml"))]
     if let Some(snap) = nvml_linux::try_snapshot() {
@@ -132,7 +132,7 @@ fn compute_apps_pid_memory_mb_smi() -> Option<HashMap<u32, u64>> {
     Some(map)
 }
 
-/// Lignes pour `DaemonResponse::Stats`.
+/// Lines for `DaemonResponse::Stats`.
 pub fn compute_apps_display_lines() -> Vec<String> {
     #[cfg(all(target_os = "linux", feature = "nvml"))]
     if let Some(snap) = nvml_linux::try_snapshot() {

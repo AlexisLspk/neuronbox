@@ -10,4 +10,4 @@ pub mod vram_watch;
 
 pub use gpu::{detect_gpus, primary_gpu_vram_mb, soft_vram_check, GpuDevice, GpuError};
 pub use host::{HostProbe, HostSnapshot, TrainingBackend};
-pub use protocol::{DaemonRequest, DaemonResponse, SessionInfo};
+pub use protocol::{ActiveModelInfo, DaemonRequest, DaemonResponse, SessionInfo};

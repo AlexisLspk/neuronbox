@@ -94,6 +94,10 @@ pub fn ensure_python_env(env_root: &Path, cfg: &NeuronConfig) -> Result<PathBuf>
         }
     }
 
+    if cfg.runtime.packages.is_empty() && extra_index.is_empty() {
+        return Ok(venv_python);
+    }
+
     let pip_exe = if cfg!(target_os = "windows") {
         env_root.join("Scripts").join("pip.exe")
     } else {

@@ -1,4 +1,4 @@
-//! Couche unique de sonde hôte : GPU, plateforme, backend PyTorch probable.
+//! Single host probe layer: GPU, platform, likely PyTorch backend.
 
 mod apple;
 mod nvidia;

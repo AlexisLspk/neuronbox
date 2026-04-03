@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use crate::daemon_spawn;
 use crate::env_hash;
 use crate::model_resolve::use_local_filesystem;
-use crate::paths::{neuronbox_home, store_root};
+use crate::paths::{neuronbox_home, project_dir_from_yaml, store_root};
 use crate::{model_alias, model_resolve};
 
 use super::init::default_yaml_path;
@@ -28,10 +28,7 @@ pub async fn serve(yaml: Option<PathBuf>) -> Result<()> {
 
     let path = yaml.unwrap_or_else(default_yaml_path);
     let cfg = NeuronConfig::load_path(&path)?;
-    let cwd = path
-        .parent()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."));
+    let cwd = project_dir_from_yaml(&path);
 
     let hf_id = model_alias::resolve_for_hf_id(&cfg.model.name);
     if !model_resolve::use_local_filesystem(&cfg) {
@@ -70,6 +67,9 @@ pub async fn serve(yaml: Option<PathBuf>) -> Result<()> {
     cmd.env("HF_HOME", &hf_home);
     if let Some(s) = pytorch_alloc_env(&cfg) {
         cmd.env("PYTORCH_CUDA_ALLOC_CONF", s);
+    }
+    if !cfg.env.contains_key("PYTHONPATH") {
+        cmd.env_remove("PYTHONPATH");
     }
     for (k, v) in &cfg.env {
         cmd.env(k, v);

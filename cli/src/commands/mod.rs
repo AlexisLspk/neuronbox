@@ -1,4 +1,5 @@
 pub mod dashboard;
+mod dashboard_demo;
 pub mod gpu_cmd;
 pub mod host_cmd;
 pub mod init;

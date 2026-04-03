@@ -1,4 +1,4 @@
-//! Construction d’un `HostSnapshot` unique pour tout le runtime / CLI.
+//! Build a single `HostSnapshot` for the whole runtime / CLI.
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -10,12 +10,12 @@ use super::snapshot::{
     infer_training_backend, platform_info, HostSnapshot, ProbeStatus, HOST_SNAPSHOT_SCHEMA_VERSION,
 };
 
-/// Durée de validité du cache pour éviter plusieurs sondes lourdes dans le même flux CLI.
+/// Cache TTL to avoid multiple heavy probes in the same CLI flow.
 const SNAPSHOT_CACHE_TTL: Duration = Duration::from_secs(2);
 
 static SNAPSHOT_CACHE: Mutex<Option<(Instant, HostSnapshot)>> = Mutex::new(None);
 
-/// Sonde l’hôte une fois (outils système + heuristique backend entraînement).
+/// Probe the host once (system tools + training-backend heuristic).
 pub struct HostProbe;
 
 impl HostProbe {
@@ -32,7 +32,7 @@ impl HostProbe {
         snap
     }
 
-    /// Ignore le cache (tests ou besoin d’une lecture forcée).
+    /// Bypass cache (tests or forced refresh).
     pub fn snapshot_fresh() -> HostSnapshot {
         Self::snapshot_uncached()
     }

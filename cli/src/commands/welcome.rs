@@ -5,12 +5,13 @@ use std::io::{self, Write};
 use crate::ui::theme;
 
 const BANNER: &str = r#"
- ███╗   ██╗███████╗██╗   ██╗██████╗  ██████╗ ███╗   ██╗██████╗  ██████╗ ██╗  ██╗
- ████╗  ██║██╔════╝██║   ██║██╔══██╗██╔═══██╗████╗  ██║██╔══██╗██╔═══██╗╚██╗██╔╝
- ██╔██╗ ██║█████╗  ██║   ██║██████╔╝██║   ██║██╔██╗ ██║██████╔╝██║   ██║ ╚███╔╝
- ██║╚██╗██║██╔══╝  ██║   ██║██╔══██╗██║   ██║██║╚██╗██║██╔══██╗██║   ██║ ██╔██╗
- ██║ ╚████║███████╗╚██████╔╝██║  ██║╚██████╔╝██║ ╚████║██████╔╝╚██████╔╝██╔╝ ██╗
- ╚═╝  ╚═══╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═════╝  ╚═════╝ ╚═╝  ╚═╝
+
+'|.   '|'                                           '||''|.                   
+ |'|   |    ....  ... ...  ... ..    ...   .. ...    ||   ||    ...   ... ... 
+ | '|. |  .|...||  ||  ||   ||' '' .|  '|.  ||  ||   ||'''|.  .|  '|.  '|..'  
+ |   |||  ||       ||  ||   ||     ||   ||  ||  ||   ||    || ||   ||   .|.   
+.|.   '|   '|...'  '|..'|. .||.     '|..|' .||. ||. .||...|'   '|..|' .|  ||. 
+                                                                        
 "#;
 
 /// Print welcome banner and getting-started flow (English, themed when TTY).
@@ -52,6 +53,10 @@ pub fn run() -> io::Result<()> {
     theme::print_command_line(
         " 4.",
         "neuron dashboard         # live TUI: sessions + host GPU summary",
+    )?;
+    theme::print_command_line(
+        "   ",
+        "neuron dashboard --demo  # full mock (Unix): fake sessions + synthetic VRAM overlay",
     )?;
     theme::print_warning_line(" Tip: start the daemon with `neuron daemon` in another terminal if `run` does not spawn it.")?;
 

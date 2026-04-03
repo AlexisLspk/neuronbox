@@ -2,111 +2,155 @@
 
 **Run local AI work (training, fine-tuning, inference, benchmarks) without reinventing glue code every week.**
 
-You describe the project once in **`neuron.yaml`**: where weights live (model hub, a folder on disk, or a single file), which Python stack you need, GPU expectations, and the script to run. NeuronBox builds or reuses a **hashed virtualenv**, exposes paths to your code through **`NEURONBOX_*` env vars**, and can spin an optional **daemon** so you get a **live terminal dashboard** of sessions and GPU activity. When you need hard isolation, flip to **Docker/OCI**: same manifest, containerized execution.
+**Website:** [neuronbox.dev](https://neuronbox.dev)
 
-**`neuron`** alone drops you on a short **getting-started** screen; **`neuron help`** lists everything else.
+<video src="docs/media/dashboard-demo.mp4" controls playsinline width="720">
+  <a href="docs/media/dashboard-demo.mp4">Download demo video (MP4)</a>
+</video>
 
-**Scope:** NeuronBox is a **working local stack**: CLI, `neurond` daemon, socket protocol, dashboard, and model store, for **machine-local** AI workflows you run yourself. It is **not** a hosted multi-tenant cloud service. Semver **0.1.x** is early versioning, not a “prototype only” label.
+*Demo: `neuron dashboard --demo` (terminal UI).*
 
-**License:** Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option (see [Cargo.toml](Cargo.toml)).
+You describe the project once in **`neuron.yaml`**: where weights live (Hugging Face–style id, a folder on disk, or a single file), which Python stack you need, GPU expectations, and the script to run. NeuronBox builds or reuses a **hashed virtualenv** under `~/.neuronbox/store/envs/`, wires **`NEURONBOX_*` environment variables** into your process, and talks to a **Unix-socket daemon** (`neurond`) so **`neuron stats`** and **`neuron dashboard`** show **live sessions**, host/GPU probes, and (when your code reports them) **tokens per second**. For hard isolation, use **`neuron run --oci`** with **`runtime.mode: oci`** in the manifest—Docker is used only on that path.
 
----
+**`neuron`** with no subcommand opens a short **getting-started** screen; **`neuron help`** lists every command.
 
-## Why NeuronBox (at a glance)
+**Scope:** NeuronBox is a **working local stack**: CLI, `neurond`, newline-delimited JSON on a Unix socket, terminal dashboard, and a **global model store**. It is **not** a hosted multi-tenant cloud. Version **0.1.0** is early but usable; APIs and CLI flags may still evolve.
 
-1. **End of the “infrastructure death march”**: you declare what the job needs (for example **`gpu.min_vram`** in **`neuron.yaml`**) instead of spending cycles on CUDA matrices, driver versions, and ad-hoc Docker volume maps for huge weight trees. The stack stays **environment-aware** for GPU/VRAM and models.
-
-2. **A sane “model store,” not a 50 GB image pull**: Docker layers are a poor transport for multi-gigabyte weights. NeuronBox treats the model as a **first-class artifact**: **shared cache** across projects, paths wired via **`NEURONBOX_*`**, and room for **lazy / progressive** loading patterns, without shipping checkpoints inside images.
-
-3. **Hot-swap for real iteration**: swapping models in plain Docker often means **stop container, new image, cold GPU context**. **`neuron swap`** (plus **`neuron serve`** / workers) keeps the **Python stack and context warm** and swaps **weights** via the daemon and swap signal, which is much faster for research and A/B runs.
-
-4. **GPU abstraction across platforms**: **`neuron host inspect`** and **`neuron gpu list`** summarize **Metal, ROCm, CUDA**, and optional **NVML** so one mental model covers laptops and Linux boxes, not a bespoke script per machine.
+**License:** [GNU Affero General Public License v3](LICENSE) (open source). SPDX identifier in manifests: **`AGPL-3.0-only`**. If you cannot meet AGPL obligations (e.g. closed-source SaaS), you need a **commercial license** — see [LICENSING.md](LICENSING.md) and contact **neuronbox.contact@proton.me**.
 
 ---
 
 ## Contents
 
 - [Why NeuronBox (at a glance)](#why-neuronbox-at-a-glance)
-- [Tutorial: from zero](#tutorial-from-zero)
+- [Tutorial: end-to-end](#tutorial-end-to-end)
+- [How a run works](#how-a-run-works)
+- [Daemon, sessions, and throughput](#daemon-sessions-and-throughput)
+- [Dashboard and demo mode](#dashboard-and-demo-mode)
 - [Use cases](#use-cases)
 - [NeuronBox vs Docker](#neuronbox-vs-docker)
-- [CLI quick reference](#cli-quick-reference)
-- [Prerequisites & build](#prerequisites--build)
+- [CLI reference](#cli-reference)
+- [Environment variables](#environment-variables)
+- [Prerequisites and build](#prerequisites-and-build)
 - [References](#references)
 - [Repository layout](#repository-layout)
+- [Contributing](#contributing)
 
 ---
 
-## Tutorial: from zero
+## Why NeuronBox (at a glance)
 
-**1. Build the workspace**
+1. **Declare the job, not the plumbing**: **`gpu.min_vram`**, **`runtime.packages`**, **`model.source`**, and **`entrypoint`** live in **`neuron.yaml`** instead of ad-hoc CUDA matrices and one-off volume maps.
+
+2. **Model store, not a 50 GB image layer**: weights are **first-class artifacts** in **`~/.neuronbox/store`**, shared across projects, with paths exposed via **`NEURONBOX_MODEL_DIR`** (and related vars). **`neuron pull`** fetches Hugging Face–style **`org/model`** trees into that store (see **`neuron pull --help`** for aliases and local paths).
+
+3. **Hot-swap for iteration**: **`neuron swap`** updates daemon state and **`~/.neuronbox/swap_signal.json`**; **`neuron serve`** runs a long-lived Python worker that can react without cold-starting your whole stack for every weight change.
+
+4. **One view of the machine**: **`neuron host inspect`** and **`neuron gpu list`** summarize **Metal, ROCm, CUDA**, and optional **NVML** so laptops and Linux servers share one mental model.
+
+---
+
+## Tutorial: end-to-end
+
+### 1. Build the binaries
+
+From your clone:
 
 ```bash
-cd NeuroBox   # your clone of this repository
-cargo build --workspace
+cd neuronbox
+cargo build -p neuronbox-cli -p neuronbox-runtime --bin neurond
 ```
 
-Use the binary by path (or add `target/debug` to your `PATH`):
+You need **`target/debug/neuron`** and **`target/debug/neurond`** side by side (or set **`NEUROND_PATH`** to the daemon binary). Add **`target/debug`** to **`PATH`** if you like.
 
 ```bash
 ./target/debug/neuron          # welcome screen
 ./target/debug/neuron help     # full command list
 ```
 
-**2. Create a project manifest**
+### 2. Create a project
 
 ```bash
 mkdir ~/my-llm-project && cd ~/my-llm-project
-/path/to/NeuroBox/target/debug/neuron init
+/path/to/neuronbox/target/debug/neuron init
 ```
 
-This writes **`neuron.yaml`**. Edit `model.name`, `entrypoint`, `gpu.min_vram`, and `runtime.packages` for your machine.
+Edit **`neuron.yaml`**: **`model`**, **`entrypoint`**, **`runtime.packages`**, **`gpu.min_vram`**, **`runtime.mode`** (`host` vs `oci`), etc. Schema: [specs/neuron.yaml.schema.json](specs/neuron.yaml.schema.json).
 
-**3. Point NeuronBox at your model**
+The template sets **`entrypoint: train.py`** — create that script (or change **`entrypoint`** to your own file) before **`neuron run`**.
 
-- **Remote weight trees** via `org/model` ids (the format used by common open hubs):  
+### 3. Get weights
+
+- **Hub-style id** (one slash, no colon):
 
   ```bash
-  /path/to/NeuroBox/target/debug/neuron pull org/model
+  /path/to/neuronbox/target/debug/neuron pull org/model
   ```
 
-  Downloads land in the **global store** under `~/.neuronbox` by default.
+  Artifacts land under **`~/.neuronbox/store`** by default.
 
-- **Local weights** (folder or `.gguf` / `.safetensors` / etc.): set `model.source: local` and `model.name` in `neuron.yaml` (no pull step).
+- **Local tree or file** (`.gguf`, `.safetensors`, …): set **`model.source: local`** and **`model.name`** to the path; no **`pull`** step.
 
-- **OCI container images** (e.g. `ubuntu:22.04`): **not** handled by `neuron pull`. Use **`docker pull <image>`** directly, or **`neuron oci prepare --image <image>`** if you are building a runc bundle (Docker required for that subcommand only).
+- **Container images** are **not** pulled by **`neuron pull`**. Use **`docker pull`** yourself, or **`neuron oci prepare`** when building a runc bundle ([docs/OCI_AND_DOCKER.md](docs/OCI_AND_DOCKER.md)).
 
-See [specs/daemon-sessions.md](specs/daemon-sessions.md) for store layout. See [docs/OCI_AND_DOCKER.md](docs/OCI_AND_DOCKER.md) for when Docker is invoked.
+Optional: **`HF_TOKEN`** in the environment for private Hub repos.
 
-**4. Run your entrypoint**
-
-```bash
-/path/to/NeuroBox/target/debug/neuron run
-```
-
-NeuronBox creates or reuses a **venv keyed by your `runtime` section**, sets `NEURONBOX_MODEL_DIR` (and related env), and runs your script. **`neuron run`** tries to start **`neurond`** in the background when the socket is down (best effort); if `stats` / `dashboard` still cannot connect, run **`neuron daemon`** in another terminal.
-
-**5. Watch the system (optional)**
-
-**`neuron stats`** and **`neuron dashboard`** need a reachable **`neurond`** on the Unix socket (default `~/.neuronbox/neuron.sock`, or `NEURONBOX_SOCKET`).
-
-In another terminal:
+### 4. Run the entrypoint
 
 ```bash
-/path/to/NeuroBox/target/debug/neuron dashboard   # TUI: sessions + host/GPU summary
-# or
-/path/to/NeuroBox/target/debug/neuron stats       # plain-text snapshot
+/path/to/neuronbox/target/debug/neuron run
 ```
 
-**6. Demo populated dashboard (no real training)**
-
-From the **repo root**:
+From the directory that contains **`neuron.yaml`**, or point at another manifest:
 
 ```bash
-./cli/scripts/demo_dashboard.sh
+neuron run -f path/to/neuron.yaml
 ```
 
-In a second terminal: `./target/debug/neuron dashboard`. Stop the demo with `Ctrl+C` in the first terminal.
+**`neuron run`** resolves the model (pull if needed for Hub ids), ensures the **hashed venv**, sets **`NEURONBOX_MODEL_DIR`**, **`NEURONBOX_SESSION_NAME`**, **`NEURONBOX_SESSION_VRAM_MB`**, and related vars, then spawns your **`entrypoint`** script. It **registers** the child with **`neurond`** and **unregisters** when the process exits.
+
+Shortcut: **`neuron run org/model`** with a single HF-style argument only **pulls** and prints where the model lives—you still need a **`neuron.yaml`** and **`entrypoint`** to execute code.
+
+**`neuron run`** tries to start **`neurond`** if the socket is down (best effort). If **`stats`** / **`dashboard`** cannot connect, run **`neuron daemon`** in another terminal.
+
+### 5. Watch the machine
+
+```bash
+/path/to/neuronbox/target/debug/neuron dashboard   # TUI: sessions + charts + host/GPU
+/path/to/neuronbox/target/debug/neuron stats         # plain-text snapshot
+```
+
+Default socket: **`~/.neuronbox/neuron.sock`**, overridable with **`NEURONBOX_SOCKET`**.
+
+---
+
+## How a run works
+
+| Piece | Behavior |
+|--------|----------|
+| **Virtualenv** | Path under **`store/envs/`** is a hash of **`runtime.python`**, **`runtime.cuda`**, and **`runtime.packages`**. Same manifest shape ⇒ same env. Optional **`requirements.lock`** in that env dir + **`neuron lock`** for pinned installs. |
+| **Installer** | Prefers **`uv pip install`** when **`uv`** is on **`PATH`**; otherwise **`pip`**. Empty **`packages`** and no CUDA/ROCm extra index ⇒ no pip invocation. |
+| **Model path** | **`NEURONBOX_MODEL_DIR`** points at the resolved tree (store or local). **`NEURONBOX_MODEL_PATH`** when the manifest points at a single weights file. |
+| **Soft VRAM check** | If **`gpu.min_vram`** is set and the host reports GPU memory, **`neuron run`** can warn when estimates exceed what looks available (non-blocking). |
+| **Child environment** | Inherited **`PYTHONPATH`** is **removed** unless you set **`PYTHONPATH`** under **`env:`** in **`neuron.yaml`** (avoids IDE-injected paths breaking venv **numpy**/**torch**). |
+
+---
+
+## Daemon, sessions, and throughput
+
+**`neurond`** keeps an in-memory registry of **sessions** (name, PID, estimated VRAM, optional **`tokens_per_sec`**). **`neuron run`** sends **`register_session`** after spawn and **`unregister_session`** after exit.
+
+To **refresh throughput** for the dashboard and **`neuron stats`**, send another **`register_session`** line with the **same PID** and an updated **`tokens_per_sec`** (see [specs/daemon-sessions.md](specs/daemon-sessions.md)). **`neuron run`** exports **`NEURONBOX_SESSION_NAME`** and **`NEURONBOX_SESSION_VRAM_MB`** so your script can match the initial registration.
+
+Protocol types: **`runtime/src/protocol.rs`**.
+
+---
+
+## Dashboard and demo mode
+
+- **`neuron dashboard`** — real **Stats** from the daemon, **HostProbe** for OS/arch/backends/GPUs, ~10 Hz UI refresh for session table and throughput history (history is **client-side**, not stored in the daemon).
+
+- **`neuron dashboard --demo`** (Unix) — starts synthetic sessions (helper **`sleep`** PIDs), animated tok/s, a mock **swap** model, and optional synthetic VRAM styling. Quit with **`q`** / **`Esc`** so the demo task can unregister. For cosmetic gauges on real hardware without fake sessions, you can set **`NEURONBOX_DEMO_SYNTHETIC_METRICS=1`** (see [docs/CLI_UX.md](docs/CLI_UX.md)).
 
 ---
 
@@ -114,82 +158,99 @@ In a second terminal: `./target/debug/neuron dashboard`. Stop the demo with `Ctr
 
 | Scenario | Why NeuronBox |
 |----------|----------------|
-| **Training, LoRA, eval, batch inference** | One manifest ties **code + weights + Python + GPU**; you run the same flow on your laptop or a beefier box. |
-| **Large models & shared disks** | **Central store** for downloaded trees; local paths stay **references**, not copies into every clone. |
-| **Reproducible envs** | `runtime` hashes into `store/envs/…`; **`neuron lock`** pins dependencies when you care about bit-for-bit installs. |
-| **Visibility while jobs run** | Daemon + **`neuron dashboard`** / **`neuron stats`** show who’s on the GPU and rough throughput where the app reports it. |
-| **Optional isolation** | **`neuron run --oci`** / `runtime.mode: oci` when you want container mounts and NVIDIA toolkit without writing `docker run` by hand each time. |
-| **Mixed hardware** | **`neuron host inspect`** and **`neuron gpu list`** give a **versioned snapshot** (Metal, ROCm, CUDA) for support and CI notes. |
+| **Training, LoRA, eval, batch inference** | One manifest ties **code + weights + Python + GPU**; same commands on laptop or server. |
+| **Large models and shared disks** | **Central store**; projects reference paths, not duplicate trees. |
+| **Reproducible envs** | Hashed env dirs + **`neuron lock`** / **`requirements.lock`**. |
+| **Visibility** | Daemon + **`dashboard`** / **`stats`** for sessions and reported tok/s. |
+| **Optional isolation** | **`neuron run --oci`** when **`runtime.mode: oci`** and you want Docker mounts + NVIDIA toolkit without hand-written **`docker run`**. |
+| **Mixed hardware** | **`neuron host inspect`** / **`neuron gpu list`** for support and CI notes. |
 
 ---
 
 ## NeuronBox vs Docker
 
-They solve overlapping but different problems: NeuronBox is not a Docker replacement.
-
 | | **Docker** | **NeuronBox** |
 |---|------------|---------------|
-| **Primary unit** | Image + container lifecycle | **Project manifest** (`neuron.yaml`) + host paths |
-| **Strength** | Portable images, strong isolation, orchestration ecosystems | **Fast iteration on metal**: hashed venvs, **shared model store**, one command to run what `neuron.yaml` declares |
-| **ML ergonomics** | You compose `docker run`, volumes, and CUDA yourself | **Wired env vars** (`NEURONBOX_MODEL_DIR`, etc.), native model pull/store on the host; **optional** OCI (`neuron run --oci`) uses Docker only when you opt in |
-| **When to prefer Docker alone** | Production deploys, identical bits everywhere, Kubernetes | *n/a* |
-| **When NeuronBox helps** | *n/a* | Daily local work, consistent project contract, optional Docker only when you opt in |
-
-**Bottom line:** Use Docker when the image *is* the product. Use NeuronBox when the **repo + YAML + venv + store** are the product and you want one tool to glue them, **without** giving up Docker for the cases where containers are the right tool.
+| **Primary unit** | Image + container | **`neuron.yaml`** + host paths |
+| **Strength** | Portability, isolation, orchestration | **Fast iteration on metal**: hashed venvs, **model store**, one command to run the manifest |
+| **ML weights** | You map volumes yourself | **Native pull/store**, **`NEURONBOX_*`** wiring |
+| **When to prefer Docker alone** | Production parity, K8s | — |
+| **When NeuronBox helps** | — | Daily local work; Docker only when you opt into **OCI** |
 
 ---
 
-## CLI quick reference
+## CLI reference
 
 | Command | Role |
 |---------|------|
-| `neuron` | Welcome screen (no subcommand) |
-| `neuron help` | Full help + quick start |
-| `neuron init` | Create `neuron.yaml` |
-| `neuron pull <id>` | ML models only: HF-style id, alias, or local path → store |
-| `neuron run` | Project entrypoint on host (venv + optional GPU checks) |
-| `neuron run --oci` | Same project via **Docker** OCI mounts (explicit opt-in) |
-| `neuron serve` | Long-lived worker + swap signal (same venv as `run`) |
-| `neuron swap` | Update daemon state + `~/.neuronbox/swap_signal.json` (for `neuron serve` / workers) |
-| `neuron stats` | Text stats (sessions + GPU lines) |
-| `neuron dashboard` | Terminal UI (sessions + host/GPU) |
-| `neuron host inspect` | JSON `HostSnapshot` |
+| `neuron` | Welcome screen |
+| `neuron help` | Full help |
+| `neuron init` | Create **`neuron.yaml`** in the current directory |
+| `neuron pull <id>` | ML artifacts: HF-style **`org/model`**, configured **alias**, or **local path** → store |
+| `neuron run` | Run **`entrypoint`** from **`neuron.yaml`** (host by default) |
+| `neuron run -f FILE` | Use another manifest path |
+| `neuron run --gpu 0` | Sets **`CUDA_VISIBLE_DEVICES`** for the child |
+| `neuron run --vram 12gb` | CLI VRAM hint for the session record |
+| `neuron run --oci` | Force Docker OCI path (requires **`runtime.mode: oci`** alignment; Linux+NVIDIA for GPU containers) |
+| `neuron run org/model` | Pull-only shortcut when a single HF-like arg is given |
+| `neuron serve [-f FILE]` | Long-lived worker + swap signal (same venv resolution as **`run`**) |
+| `neuron swap MODEL` | Daemon **active model** + **`swap_signal.json`** |
+| `neuron stats` | Text: sessions + GPU lines + swap |
+| `neuron dashboard` | Full-screen TUI |
+| `neuron dashboard --demo` | TUI + built-in mock load (Unix) |
+| `neuron host inspect` | JSON **HostSnapshot** |
 | `neuron gpu list` | Detected GPUs |
 | `neuron model list` | Store index |
-| `neuron lock` | Generate `requirements.lock` for hashed env |
-| `neuron daemon` | Run `neurond` in foreground |
-| `neuron oci prepare` / `oci runc` | Expert OCI bundle path (`prepare` uses Docker on the host) |
+| `neuron lock [-f FILE]` | Write **`requirements.lock`** into the hashed env (**`uv pip compile`**) |
+| `neuron daemon` | Run **`neurond`** in the foreground |
+| `neuron oci prepare` | Runc bundle (**Docker** on host for rootfs export) |
+| `neuron oci runc` | Run **`runc`** against a prepared bundle |
 
-### Breaking changes (CLI)
+### Breaking changes (older workflows)
 
-Older workflows that used **`neuron pull`** for Docker image tags, **`neuron ps` / `stop` / `rm`**, or **`neuron run -it image …`** as a `docker run` proxy must switch to the **`docker`** CLI directly. NeuronBox keeps Docker **only** under the OCI commands above.
+**`neuron pull`** is **not** for Docker image tags. **`neuron ps` / `stop` / `rm`** and **`neuron run`** as a generic **`docker run`** proxy are removed—use **`docker`** directly. NeuronBox keeps Docker under **`neuron oci …`** and **`neuron run --oci`** only.
 
 ---
 
-## Prerequisites & build
+## Environment variables
 
-- **Rust** (this workspace)
-- **Python 3** (projects and `neuron serve` worker)
-- **GPU tooling** (optional): NVIDIA (`nvidia-smi`), AMD (`rocm-smi`), or Apple Silicon (Metal); see `neuron host inspect`
+| Variable | Purpose |
+|----------|---------|
+| **`NEURONBOX_SOCKET`** | Unix socket path for **`neurond`** (default **`~/.neuronbox/neuron.sock`**) |
+| **`NEUROND_PATH`** | Path to **`neurond`** if not beside **`neuron`** |
+| **`HF_TOKEN`** | Authenticated Hub downloads for **`neuron pull`** |
+| **`NEURONBOX_DEMO_SYNTHETIC_METRICS`** | `1` / `true` / `yes` — extra synthetic styling in dashboard (optional) |
+| **`NEURONBOX_DISABLE_VRAM_WATCH`** | Disables daemon VRAM watch path (e.g. demo spawn) |
+
+Set per-project secrets and flags in **`neuron.yaml`** → **`env:`** (applied to **`run`** / **`serve`** children).
+
+---
+
+## Prerequisites and build
+
+- **Rust** (workspace; see [rust-toolchain.toml](rust-toolchain.toml) if present)
+- **Python 3** on **`PATH`** (version should match **`runtime.python`** in your manifest when possible)
+- **`uv`** (optional, recommended for faster **`pip`** installs)
+- **GPU tooling** (optional): NVIDIA, AMD, or Apple Silicon; see **`neuron host inspect`**
 
 ```bash
 cargo build --workspace
 ```
 
-**Linux + NVIDIA:** NVML build for better GPU reporting:
+**Linux + NVIDIA** (richer reporting when linked):
 
 ```bash
 cargo build -p neuronbox-cli --features nvml
 cargo build -p neuronbox-runtime --features nvml
 ```
 
-Binaries: `target/debug/neuron` and `target/debug/neurond` (or `release/`).
-
-**Install on PATH (optional):**
+Outputs: **`target/debug/neuron`**, **`target/debug/neurond`** (or **`release/`**).
 
 ```bash
 cargo install --path cli
 ```
+
+installs **`neuron`**; install or copy **`neurond`** accordingly, or rely on **`NEUROND_PATH`**.
 
 ---
 
@@ -197,21 +258,35 @@ cargo install --path cli
 
 | Doc | Topic |
 |-----|--------|
-| [neuronbox-mvp.md](neuronbox-mvp.md) | Product vision, architecture & specification reference |
-| [docs/CLI_UX.md](docs/CLI_UX.md) | Welcome screen, terminal theme, dashboard behavior |
-| [docs/OCI_AND_DOCKER.md](docs/OCI_AND_DOCKER.md) | When Docker is used (OCI only) vs ML-first host path |
-| [specs/neuron.yaml.schema.json](specs/neuron.yaml.schema.json) | `neuron.yaml` schema |
+| [docs/CLI_UX.md](docs/CLI_UX.md) | Welcome screen, theme, dashboard behavior |
+| [docs/OCI_AND_DOCKER.md](docs/OCI_AND_DOCKER.md) | When Docker runs |
+| [specs/neuron.yaml.schema.json](specs/neuron.yaml.schema.json) | Manifest schema |
 | [specs/swap-signal.schema.json](specs/swap-signal.schema.json) | Swap signal file |
-| [specs/daemon-sessions.md](specs/daemon-sessions.md) | Daemon socket & sessions |
-| [docs/MULTI_GPU.md](docs/MULTI_GPU.md) | Multi-GPU / DDP (documentation) |
-| [docs/GPU_VRAM.md](docs/GPU_VRAM.md) | VRAM, NVML, MIG notes, `NEURONBOX_DISABLE_VRAM_WATCH` |
-| [docs/SECURITY.md](docs/SECURITY.md) | Socket trust boundary, line limits, tokens, model trust |
-| [specs/examples/](specs/examples/) | Example YAML files |
+| [specs/daemon-sessions.md](specs/daemon-sessions.md) | Socket protocol, sessions, tok/s updates |
+| [docs/MULTI_GPU.md](docs/MULTI_GPU.md) | Multi-GPU / DDP |
+| [docs/GPU_VRAM.md](docs/GPU_VRAM.md) | VRAM, NVML, **`NEURONBOX_DISABLE_VRAM_WATCH`** |
+| [docs/SECURITY.md](docs/SECURITY.md) | Socket trust, limits, model trust |
+| [specs/examples/](specs/examples/) | Example YAML snippets |
 
 ---
 
 ## Repository layout
 
-- **`cli/`**: `neuron` binary and `cli/scripts/` demos
-- **`runtime/`**: library + `neurond` daemon
-- **`specs/`**: JSON Schema and `neuron.yaml` examples
+- **`cli/`** — **`neuron`** binary; **`cli/scripts/serve_worker.py`** (used by **`neuron serve`**)
+- **`runtime/`** — shared library + **`neurond`**
+- **`specs/`** — JSON Schema, protocol docs, YAML examples
+- **`sdk/`** — optional **Python** client for the daemon socket ([`sdk/neuronbox/client.py`](sdk/neuronbox/client.py)); `pip install -e sdk/` from the repo root if you want it on your `PYTHONPATH`
+
+---
+
+## Contributing
+
+Small changes welcome. Before opening a PR:
+
+```bash
+cargo fmt --all
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+```
+
+By contributing, you agree your contributions are licensed under the same terms as the project (**AGPL v3** for the open-source distribution; see [LICENSING.md](LICENSING.md)). For security-sensitive issues, see [docs/SECURITY.md](docs/SECURITY.md).

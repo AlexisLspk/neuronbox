@@ -13,12 +13,12 @@ pub enum GpuError {
     Parse,
 }
 
-/// Liste les GPU. Ordre : NVIDIA, puis AMD ROCm, puis Apple Silicon.
+/// List GPUs. Order: NVIDIA, then AMD ROCm, then Apple Silicon.
 pub fn detect_gpus() -> Result<Vec<GpuDevice>, GpuError> {
     Ok(HostProbe::snapshot().gpus)
 }
 
-/// Best-effort VRAM totale du GPU principal (NVIDIA index 0, ou ROCm).
+/// Best-effort total VRAM of the primary GPU (NVIDIA index 0, or ROCm).
 pub fn primary_gpu_vram_mb() -> Option<u64> {
     HostProbe::snapshot().primary_vram_mb()
 }

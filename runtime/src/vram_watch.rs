@@ -1,5 +1,5 @@
-//! Surveillance « soft » : si l’usage VRAM rapporté par `nvidia-smi` pour un PID dépasse
-//! ~115 % de l’estimation enregistrée, envoi de SIGKILL (Linux uniquement).
+//! Soft monitoring: if VRAM usage reported by `nvidia-smi` for a PID exceeds
+//! ~115% of the registered estimate, send SIGKILL (Linux only).
 
 use std::process::Command;
 use std::time::Duration;

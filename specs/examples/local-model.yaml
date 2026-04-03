@@ -1,9 +1,9 @@
-# Modèle sur disque : dossier type Hugging Face, adaptateur LoRA, ou fichier unique.
-name: projet-weights-locaux
+# On-disk model: Hugging Face-style folder, LoRA adapter, or single file.
+name: local-weights-project
 version: "1.0"
 
 model:
-  # Chemin relatif au répertoire du neuron.yaml, ou absolu, ou ~/models/...
+  # Path relative to neuron.yaml directory, or absolute, or ~/models/...
   name: ./my-model-snapshot
   source: local
 

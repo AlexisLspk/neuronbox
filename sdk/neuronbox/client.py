@@ -13,7 +13,7 @@ def _default_sock() -> Path:
 
 
 class DaemonClient:
-    """Client JSON newline-delimited sur la socket Unix du daemon."""
+    """Newline-delimited JSON client for the NeuronBox daemon Unix socket."""
 
     def __init__(self, socket_path: Path | None = None) -> None:
         raw = os.environ.get("NEURONBOX_SOCKET")

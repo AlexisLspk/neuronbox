@@ -1,53 +1,53 @@
-# Multi-GPU avec NeuronBox (documentation)
+# Multi-GPU with NeuronBox
 
-NeuronBox **n’orchestre pas** encore l’entraînement multi-GPU (pas de lanceur DDP intégré). Ce document décrit le **contrat actuel** et comment enchaîner avec PyTorch / l’écosystème.
+NeuronBox does **not** yet orchestrate multi-GPU training (no built-in DDP launcher). This document describes the **current contract** and how to chain with PyTorch / the ecosystem.
 
-## Exposer plusieurs GPU au processus
+## Exposing multiple GPUs to the process
 
-- **`neuron run --gpu 0,1`** (ou `--gpu 0,1,2`) : la CLI définit `CUDA_VISIBLE_DEVICES` pour le script d’entrée.
-- Vous pouvez aussi fixer **`CUDA_VISIBLE_DEVICES`** vous-même dans l’environnement ou dans `neuron.yaml` → section `env`.
+- **`neuron run --gpu 0,1`** (or `--gpu 0,1,2`): the CLI sets `CUDA_VISIBLE_DEVICES` for the entrypoint script.
+- You can also set **`CUDA_VISIBLE_DEVICES`** yourself in the environment or in `neuron.yaml` under `env`.
 
-Les identifiants sont ceux vus par le pilote NVIDIA sur la machine hôte (hors conteneur, ou dans le conteneur si vous passez par Docker avec `--gpus all` / device requests).
+IDs are those seen by the NVIDIA driver on the host (outside the container, or inside the container if you use Docker with `--gpus all` / device requests).
 
-## Entraînement distribué (DDP, DeepSpeed, etc.)
+## Distributed training (DDP, DeepSpeed, etc.)
 
-La responsabilité du **lancement** (nombre de processus, `MASTER_ADDR`, ports, etc.) reste dans votre **`entrypoint`** (souvent un shell ou un script Python qui appelle `torchrun`).
+**Launch** responsibility (process count, `MASTER_ADDR`, ports, etc.) stays in your **`entrypoint`** (often a shell or Python script that calls `torchrun`).
 
-Exemple minimal (à adapter à votre projet) :
+Minimal example (adapt to your project):
 
 ```bash
-# Après avoir résolu le venv / deps avec neuron.yaml
+# After resolving venv / deps from neuron.yaml
 torchrun --nproc_per_node=2 train.py
 ```
 
-Ou avec variables explicites :
+Or with explicit variables:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0,1 torchrun --standalone --nproc_per_node=2 train.py
 ```
 
-NeuronBox fournit aujourd’hui surtout : **environnement Python hashé**, **store modèle**, **enregistrement session** auprès du daemon (VRAM soft, stats). Il ne remplace pas `torchrun`, Slurm ou Kubernetes.
+NeuronBox mainly provides today: **hashed Python environment**, **model store**, **session registration** with the daemon (soft VRAM, stats). It does not replace `torchrun`, Slurm, or Kubernetes.
 
-## Champ `gpu.strategy` dans `neuron.yaml`
+## `gpu.strategy` field in `neuron.yaml`
 
-Le schéma accepte `single` | `pipeline` | `tensor`. **Aucune orchestration automatique** n’est appliquée aujourd’hui : le champ sert de **documentation / intention** et pourra piloter plus tard des lanceurs ou des validations.
+The schema accepts `single` | `pipeline` | `tensor`. **No automatic orchestration** is applied today: the field is **documentation / intent** and may later drive launchers or validation.
 
-Feuille de route possible :
+Possible roadmap:
 
-1. Valider la cohérence `strategy` vs nombre de GPU visibles.
-2. Générer ou suggérer une ligne de commande `torchrun` / documentée.
-3. Intégration optionnelle avec un scheduler (hors scope « local seul »).
+1. Validate consistency of `strategy` vs visible GPU count.
+2. Generate or suggest a documented `torchrun` command line.
+3. Optional integration with a scheduler (out of scope for “local only”).
 
-## Isolation forte (MIG, partitions)
+## Strong isolation (MIG, partitions)
 
-Pour un **quota VRAM matériel** par job, voir [GPU_VRAM.md](GPU_VRAM.md) (MIG, `CUDA_VISIBLE_DEVICES` sur UUID d’instance).
+For **hardware VRAM quota** per job, see [GPU_VRAM.md](GPU_VRAM.md) (MIG, `CUDA_VISIBLE_DEVICES` with instance UUID).
 
-## macOS et Linux
+## macOS and Linux
 
-- **Linux** : workflow CUDA / ROCm classique ; multi-GPU NVIDIA via `CUDA_VISIBLE_DEVICES` + votre lanceur.
-- **macOS** : souvent un seul device Apple / Metal ; le multi-GPU « datacenter » ne s’applique généralement pas.
+- **Linux**: typical CUDA / ROCm workflow; multi-GPU NVIDIA via `CUDA_VISIBLE_DEVICES` + your launcher.
+- **macOS**: often a single Apple / Metal device; datacenter-style multi-GPU usually does not apply.
 
-## Voir aussi
+## See also
 
-- [GPU_VRAM.md](GPU_VRAM.md) — quotas soft, MIG, monitoring.
-- [neuronbox-mvp.md](../neuronbox-mvp.md) — vision produit et historique de spécification.
+- [GPU_VRAM.md](GPU_VRAM.md) — soft quotas, MIG, monitoring.
+- [README.md](../README.md) — overview, tutorial, CLI reference.

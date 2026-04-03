@@ -29,6 +29,6 @@ jobs:
         run: |
           cargo install cargo-audit --locked
           cargo audit
-      # Linux : vérifier que la feature NVML compile (pas de GPU requis sur le runner).
+      # Linux: ensure NVML feature compiles (no GPU required on the runner).
       - if: runner.os == 'Linux'
         run: cargo build -p neuronbox-runtime --features nvml && cargo clippy -p neuronbox-runtime --features nvml -- -D warnings

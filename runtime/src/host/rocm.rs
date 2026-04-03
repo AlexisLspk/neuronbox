@@ -1,4 +1,4 @@
-//! Détection AMD via `rocm-smi`.
+//! AMD detection via `rocm-smi`.
 
 use std::process::Command;
 

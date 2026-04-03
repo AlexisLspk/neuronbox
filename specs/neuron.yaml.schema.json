@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://neuronbox.dev/schemas/neuron.yaml",
+  "$id": "https://raw.githubusercontent.com/AlexisLspk/neuronbox/main/specs/neuron.yaml.schema.json",
   "title": "neuron.yaml",
   "type": "object",
   "required": ["name", "model", "runtime", "entrypoint"],
