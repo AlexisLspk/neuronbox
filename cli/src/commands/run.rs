@@ -32,6 +32,20 @@ fn pytorch_alloc_env(cfg: &NeuronConfig) -> Option<String> {
     })
 }
 
+/// Path to the SDK `neuronbox` package (for auto-hooks via PYTHONPATH).
+fn sdk_neuronbox_path() -> Option<PathBuf> {
+    // sdk/neuronbox relative to the CLI binary's parent (repo layout)
+    let exe = std::env::current_exe().ok()?;
+    // target/debug/neuron -> repo root is ../../
+    let repo_root = exe.parent()?.parent()?.parent()?;
+    let sdk_path = repo_root.join("sdk");
+    if sdk_path.join("neuronbox").join("_hooks.py").exists() {
+        return Some(sdk_path);
+    }
+    // Fallback: installed SDK via pip (user should have it on PYTHONPATH already)
+    None
+}
+
 /// `neuron run` with `neuron.yaml` in the current directory.
 pub async fn run_project(args: RunArgs) -> Result<()> {
     let yaml_path = args.yaml.clone().unwrap_or_else(default_yaml_path);
@@ -149,9 +163,22 @@ pub async fn run_project(args: RunArgs) -> Result<()> {
     }
     cmd.env("NEURONBOX_SESSION_NAME", &cfg.name);
     cmd.env("NEURONBOX_SESSION_VRAM_MB", format!("{est_mb}"));
-    if !cfg.env.contains_key("PYTHONPATH") {
+
+    // Enable automatic throughput hooks for ML frameworks
+    cmd.env("NEURONBOX_AUTOHOOK", "1");
+    if let Some(sdk_path) = sdk_neuronbox_path() {
+        // Prepend SDK to PYTHONPATH so hooks are available
+        let existing = std::env::var("PYTHONPATH").unwrap_or_default();
+        let new_pythonpath = if existing.is_empty() {
+            sdk_path.display().to_string()
+        } else {
+            format!("{}:{}", sdk_path.display(), existing)
+        };
+        cmd.env("PYTHONPATH", new_pythonpath);
+    } else if !cfg.env.contains_key("PYTHONPATH") {
         cmd.env_remove("PYTHONPATH");
     }
+
     for (k, v) in &cfg.env {
         cmd.env(k, v);
     }

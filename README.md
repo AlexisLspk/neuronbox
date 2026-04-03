@@ -6,7 +6,7 @@
 
 ![](docs/media/dashboard-demo.png)
 
-You describe the project once in **`neuron.yaml`**: where weights live (Hugging Face–style id, a folder on disk, or a single file), which Python stack you need, GPU expectations, and the script to run. NeuronBox builds or reuses a **hashed virtualenv** under `~/.neuronbox/store/envs/`, wires **`NEURONBOX_*` environment variables** into your process, and talks to a **Unix-socket daemon** (`neurond`) so **`neuron stats`** and **`neuron dashboard`** show **live sessions**, host/GPU probes, and (when your code reports them) **tokens per second**. For hard isolation, use **`neuron run --oci`** with **`runtime.mode: oci`** in the manifest—Docker is used only on that path.
+You describe the project once in **`neuron.yaml`**: where weights live (Hugging Face–style id, a folder on disk, or a single file), which Python stack you need, GPU expectations, and the script to run. NeuronBox builds or reuses a **hashed virtualenv** under `~/.neuronbox/store/envs/`, wires **`NEURONBOX_*` environment variables** into your process, and talks to a **Unix-socket daemon** (`neurond`) so **`neuron stats`** and **`neuron dashboard`** show **live sessions**, host/GPU probes, and **tokens per second** (automatically detected via hooks for **transformers**, **vLLM**, **llama.cpp**, and **OpenAI-compatible** clients). For hard isolation, use **`neuron run --oci`** with **`runtime.mode: oci`** in the manifest—Docker is used only on that path; OCI runs do **not** register a session with `neurond`.
 
 **`neuron`** with no subcommand opens a short **getting-started** screen; **`neuron help`** lists every command.
 
@@ -134,9 +134,22 @@ Default socket: **`~/.neuronbox/neuron.sock`**, overridable with **`NEURONBOX_SO
 
 ## Daemon, sessions, and throughput
 
-**`neurond`** keeps an in-memory registry of **sessions** (name, PID, estimated VRAM, optional **`tokens_per_sec`**). **`neuron run`** sends **`register_session`** after spawn and **`unregister_session`** after exit.
+**`neurond`** keeps an in-memory registry of **sessions** (name, PID, estimated VRAM, **`tokens_per_sec`**). **`neuron run`** sends **`register_session`** after spawn and **`unregister_session`** after exit.
 
-To **refresh throughput** for the dashboard and **`neuron stats`**, send another **`register_session`** line with the **same PID** and an updated **`tokens_per_sec`** (see [specs/daemon-sessions.md](specs/daemon-sessions.md)). **`neuron run`** exports **`NEURONBOX_SESSION_NAME`** and **`NEURONBOX_SESSION_VRAM_MB`** so your script can match the initial registration.
+### Automatic throughput detection
+
+When **`neuron run`** spawns your entrypoint, it sets **`NEURONBOX_AUTOHOOK=1`** and adds the **`sdk/`** package to **`PYTHONPATH`**. This installs lightweight hooks that **automatically report tok/s** for:
+
+| Framework | Hooked method |
+|-----------|---------------|
+| **transformers** | `GenerationMixin.generate` |
+| **vLLM** | `LLM.generate` |
+| **llama.cpp** (Python) | `Llama.__call__`, `Llama.create_completion` |
+| **OpenAI client** | `Completions.create` (local endpoints) |
+
+The hooks measure **wall-clock time** and **output token count**, then push updates to the daemon. No code change required in your script.
+
+For unsupported frameworks or custom pipelines, you can call **`neuronbox.DaemonClient().call("register_session", ...)`** with the same PID and an updated **`tokens_per_sec`** (see [specs/daemon-sessions.md](specs/daemon-sessions.md)).
 
 Protocol types: **`runtime/src/protocol.rs`**.
 
@@ -146,7 +159,7 @@ Protocol types: **`runtime/src/protocol.rs`**.
 
 - **`neuron dashboard`** — real **Stats** from the daemon, **HostProbe** for OS/arch/backends/GPUs, ~10 Hz UI refresh for session table and throughput history (history is **client-side**, not stored in the daemon).
 
-- **`neuron dashboard --demo`** (Unix) — starts synthetic sessions (helper **`sleep`** PIDs), animated tok/s, a mock **swap** model, and optional synthetic VRAM styling. Quit with **`q`** / **`Esc`** so the demo task can unregister. For cosmetic gauges on real hardware without fake sessions, you can set **`NEURONBOX_DEMO_SYNTHETIC_METRICS=1`** (see [docs/CLI_UX.md](docs/CLI_UX.md)).
+- **`neuron dashboard --demo`** (Unix) — starts synthetic sessions (helper **`sleep`** PIDs), animated tok/s, a mock **swap** model, and optional synthetic VRAM styling. Quit with **`q`** / **`Esc`** so the demo task can unregister. For cosmetic gauges on real hardware without fake sessions, you can set **`NEURONBOX_DEMO_SYNTHETIC_METRICS=1`** (see [docs/GPU_VRAM.md](docs/GPU_VRAM.md)).
 
 ---
 

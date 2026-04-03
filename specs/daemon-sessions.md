@@ -25,6 +25,12 @@ When the process exits, the CLI sends `unregister_session` with the same `pid`.
 
 ## Updating tokens/s from your code
 
+### Automatic hooks (recommended)
+
+When **`neuron run`** spawns your entrypoint, it sets **`NEURONBOX_AUTOHOOK=1`** and adds the SDK to **`PYTHONPATH`**. This installs hooks for **transformers**, **vLLM**, **llama.cpp**, and **OpenAI-compatible** clients that automatically report tok/s after each generation call. No code change required.
+
+### Manual updates
+
 The registry is keyed by **`pid`**: a new `register_session` call with the **same** `pid` **replaces** the existing row (same name, new estimate, new throughput).
 
 To show a value in `neuron stats`, send periodically for example:
