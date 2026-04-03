@@ -24,7 +24,7 @@ fn unsupported_pull_target(target: &str) -> anyhow::Error {
          \n\
          `neuron pull` only fetches ML weights into the NeuronBox store:\n\
            - Hugging Face-style id: org/model (one slash, no colon)\n\
-           - short alias: e.g. llama3:8b if listed in model-aliases\n\
+           - short alias: e.g. llama3:8b if listed in bundled aliases\n\
            - local path: ./weights or /path/to/folder\n\
          \n\
          OCI image tags like ubuntu:22.04 are not ML models here.\n\
@@ -57,7 +57,7 @@ pub fn pull_model(target: &str) -> Result<()> {
 
     if looks_like_short_tag(target) {
         anyhow::bail!(
-            "unknown alias: {}. Add it in ~/.neuronbox/model-aliases.json or specs/model-aliases.json.",
+            "unknown alias: {}. Add it in ~/.neuronbox/model-aliases.json or cli/specs/model-aliases.json (from source).",
             target
         );
     }

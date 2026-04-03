@@ -59,7 +59,7 @@ fn load_merged() -> BTreeMap<String, String> {
 
     if let Ok(bundled) = serde_json::from_str::<AliasesFile>(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../specs/model-aliases.json"
+        "/specs/model-aliases.json"
     ))) {
         for (k, v) in bundled.aliases {
             out.insert(k.to_lowercase(), v);
