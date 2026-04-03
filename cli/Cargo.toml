@@ -20,7 +20,7 @@ name = "neuron"
 path = "src/main.rs"
 
 [dependencies]
-neuronbox-runtime = { version = "0.1.0", path = "../runtime" }
+neuronbox-runtime = { version = "0.1.1", path = "../runtime" }
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 dirs = "5"
