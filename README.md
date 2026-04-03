@@ -4,11 +4,11 @@
 
 **Website:** [neuronbox.dev](https://neuronbox.dev)
 
-<video src="docs/media/dashboard-demo.mp4" controls playsinline width="720">
-  <a href="docs/media/dashboard-demo.mp4">Download demo video (MP4)</a>
-</video>
+**Demo video** — GitHub’s README renderer does not show embedded `<video>`; use the link below (opens the file on GitHub, where you can play or download the MP4):
 
-*Demo: `neuron dashboard --demo` (terminal UI).*
+[▶ Dashboard demo — `docs/media/dashboard-demo.mp4`](docs/media/dashboard-demo.mp4)
+
+*Recorded with `neuron dashboard --demo` (terminal UI).*
 
 You describe the project once in **`neuron.yaml`**: where weights live (Hugging Face–style id, a folder on disk, or a single file), which Python stack you need, GPU expectations, and the script to run. NeuronBox builds or reuses a **hashed virtualenv** under `~/.neuronbox/store/envs/`, wires **`NEURONBOX_*` environment variables** into your process, and talks to a **Unix-socket daemon** (`neurond`) so **`neuron stats`** and **`neuron dashboard`** show **live sessions**, host/GPU probes, and (when your code reports them) **tokens per second**. For hard isolation, use **`neuron run --oci`** with **`runtime.mode: oci`** in the manifest—Docker is used only on that path.
 
