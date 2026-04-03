@@ -10,7 +10,7 @@ You describe the project once in **`neuron.yaml`**: where weights live (Hugging 
 
 **`neuron`** with no subcommand opens a short **getting-started** screen; **`neuron help`** lists every command.
 
-**Scope:** NeuronBox is a **working local stack**: CLI, `neurond`, newline-delimited JSON on a Unix socket, terminal dashboard, and a **global model store**. It is **not** a hosted multi-tenant cloud. Version **0.1.0** is early but usable; APIs and CLI flags may still evolve.
+**Scope:** NeuronBox is a **working local stack**: CLI, `neurond`, newline-delimited JSON on a Unix socket, terminal dashboard, and a **global model store**. It is **not** a hosted multi-tenant cloud. Version **0.1.1** is early but usable; APIs and CLI flags may still evolve.
 
 **License:** [GNU Affero General Public License v3](LICENSE) (open source). SPDX identifier in manifests: **`AGPL-3.0-only`**. If you cannot meet AGPL obligations (e.g. closed-source SaaS), you need a **commercial license** — see [LICENSING.md](LICENSING.md) and contact **neuronbox.contact@proton.me**.
 
