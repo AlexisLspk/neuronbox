@@ -70,19 +70,42 @@ pub fn resolve_model_for_run(
         return resolve_local(&cfg.model.name, project_dir);
     }
 
-    let dir = model_store::model_path(store, hf_repo_id);
-    if !dir.exists() {
-        anyhow::bail!(
+    // Try with revision first, then fallback to no revision for backward compat
+    let dir =
+        model_store::model_path_with_revision(store, hf_repo_id, cfg.model.revision.as_deref());
+    if dir.exists() {
+        validate_model_dir_or_file(&dir, true)?;
+        return Ok(ResolvedModel {
+            dir,
+            weights_file: None,
+        });
+    }
+
+    // Fallback: try without revision (for models pulled before revision support)
+    let dir_no_rev = model_store::model_path(store, hf_repo_id);
+    if dir_no_rev.exists() {
+        validate_model_dir_or_file(&dir_no_rev, true)?;
+        return Ok(ResolvedModel {
+            dir: dir_no_rev,
+            weights_file: None,
+        });
+    }
+
+    let hint = if let Some(rev) = &cfg.model.revision {
+        format!(
+            "HF model missing from store: {}. Run `neuron pull {} --revision {}` or check model.name.",
+            dir.display(),
+            hf_repo_id,
+            rev
+        )
+    } else {
+        format!(
             "HF model missing from store: {}. Run `neuron pull {}` or check model.name.",
             dir.display(),
             hf_repo_id
-        );
-    }
-    validate_model_dir_or_file(&dir, true)?;
-    Ok(ResolvedModel {
-        dir,
-        weights_file: None,
-    })
+        )
+    };
+    anyhow::bail!(hint);
 }
 
 fn expand_tilde(path: PathBuf) -> PathBuf {

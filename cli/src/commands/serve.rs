@@ -6,6 +6,7 @@ use crate::daemon_spawn;
 use crate::env_hash;
 use crate::model_resolve::use_local_filesystem;
 use crate::paths::{neuronbox_home, project_dir_from_yaml, store_root};
+use crate::sdk_path;
 use crate::{model_alias, model_resolve};
 
 use super::init::default_yaml_path;
@@ -68,9 +69,25 @@ pub async fn serve(yaml: Option<PathBuf>) -> Result<()> {
     if let Some(s) = pytorch_alloc_env(&cfg) {
         cmd.env("PYTORCH_CUDA_ALLOC_CONF", s);
     }
-    if !cfg.env.contains_key("PYTHONPATH") {
+
+    // Enable automatic throughput hooks for ML frameworks (same as neuron run)
+    if !sdk_path::autohook_disabled() {
+        cmd.env("NEURONBOX_AUTOHOOK", "1");
+        if let Some(sdk) = sdk_path::get_sdk_path() {
+            let existing = std::env::var("PYTHONPATH").unwrap_or_default();
+            let new_pythonpath = if existing.is_empty() {
+                sdk.display().to_string()
+            } else {
+                format!("{}:{}", sdk.display(), existing)
+            };
+            cmd.env("PYTHONPATH", new_pythonpath);
+        } else if !cfg.env.contains_key("PYTHONPATH") {
+            cmd.env_remove("PYTHONPATH");
+        }
+    } else if !cfg.env.contains_key("PYTHONPATH") {
         cmd.env_remove("PYTHONPATH");
     }
+
     for (k, v) in &cfg.env {
         cmd.env(k, v);
     }

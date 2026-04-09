@@ -1,16 +1,24 @@
 # NeuronBox
 
-**Run local AI work (training, fine-tuning, inference, benchmarks) without reinventing glue code every week.**
+**Build, run, and iterate on local AI workloads (training, fine-tuning, inference, benchmarks) with one workflow.**
 
 **Website:** [neuronbox.dev](https://neuronbox.dev)
 
 ![](docs/media/dashboard-demo.png)
 
-You describe the project once in **`neuron.yaml`**: where weights live (Hugging Face–style id, a folder on disk, or a single file), which Python stack you need, GPU expectations, and the script to run. NeuronBox builds or reuses a **hashed virtualenv** under `~/.neuronbox/store/envs/`, wires **`NEURONBOX_*` environment variables** into your process, and talks to a **Unix-socket daemon** (`neurond`) so **`neuron stats`** and **`neuron dashboard`** show **live sessions**, host/GPU probes, and **tokens per second** (automatically detected via hooks for **transformers**, **vLLM**, **llama.cpp**, and **OpenAI-compatible** clients). For hard isolation, use **`neuron run --oci`** with **`runtime.mode: oci`** in the manifest—Docker is used only on that path; OCI runs do **not** register a session with `neurond`.
+Describe your project once in **`neuron.yaml`**:
+- where model weights live (HF id, local folder, or file)
+- which Python stack to use
+- GPU expectations
+- which script to run
 
-**`neuron`** with no subcommand opens a short **getting-started** screen; **`neuron help`** lists every command.
+NeuronBox then handles the rest: reusable hashed virtualenvs, model store, environment wiring, and runtime visibility through **`neuron stats`** and **`neuron dashboard`**.
 
-**Scope:** NeuronBox is a **working local stack**: CLI, `neurond`, newline-delimited JSON on a Unix socket, terminal dashboard, and a **global model store**. It is **not** a hosted multi-tenant cloud. Version **0.1.1** is early but usable; APIs and CLI flags may still evolve.
+For stronger isolation, use **`neuron run --oci`** with **`runtime.mode: oci`** (Docker path only).
+
+**`neuron`** opens a short getting-started screen, and **`neuron help`** lists all commands.
+
+**Scope:** NeuronBox is a local-first stack: CLI, `neurond`, Unix-socket protocol, terminal dashboard, and shared model store. It is not a hosted multi-tenant cloud.
 
 **License:** [GNU Affero General Public License v3](LICENSE) (open source). SPDX identifier in manifests: **`AGPL-3.0-only`**. If you cannot meet AGPL obligations (e.g. closed-source SaaS), you need a **commercial license** — see [LICENSING.md](LICENSING.md) and contact **neuronbox.contact@proton.me**.
 
@@ -18,6 +26,7 @@ You describe the project once in **`neuron.yaml`**: where weights live (Hugging 
 
 ## Contents
 
+- [Quick start (60 seconds)](#quick-start-60-seconds)
 - [Why NeuronBox (at a glance)](#why-neuronbox-at-a-glance)
 - [Tutorial: end-to-end](#tutorial-end-to-end)
 - [How a run works](#how-a-run-works)
@@ -31,6 +40,30 @@ You describe the project once in **`neuron.yaml`**: where weights live (Hugging 
 - [References](#references)
 - [Repository layout](#repository-layout)
 - [Contributing](#contributing)
+
+---
+
+## Quick start (60 seconds)
+
+```bash
+# 1) Build
+cargo build -p neuronbox-cli -p neuronbox-runtime --bin neurond
+
+# 2) Create a project
+mkdir ~/my-llm-project && cd ~/my-llm-project
+/path/to/neuronbox/target/debug/neuron init --template inference
+
+# 3) Pull weights
+/path/to/neuronbox/target/debug/neuron pull org/model
+
+# 4) Run
+/path/to/neuronbox/target/debug/neuron run
+
+# 5) Observe
+/path/to/neuronbox/target/debug/neuron dashboard
+```
+
+You can pin exact model revisions with `neuron pull org/model --revision <sha-or-tag>`.
 
 ---
 
@@ -126,6 +159,8 @@ Default socket: **`~/.neuronbox/neuron.sock`**, overridable with **`NEURONBOX_SO
 |--------|----------|
 | **Virtualenv** | Path under **`store/envs/`** is a hash of **`runtime.python`**, **`runtime.cuda`**, and **`runtime.packages`**. Same manifest shape ⇒ same env. Optional **`requirements.lock`** in that env dir + **`neuron lock`** for pinned installs. |
 | **Installer** | Prefers **`uv pip install`** when **`uv`** is on **`PATH`**; otherwise **`pip`**. Empty **`packages`** and no CUDA/ROCm extra index ⇒ no pip invocation. |
+| **Pinned revisions** | Set **`model.revision`** in `neuron.yaml` (or use **`neuron pull org/model --revision <sha-or-tag>`**) for reproducible model snapshots. |
+| **ROCm index control** | Set **`runtime.rocm`** (for example `6.0`) to control the ROCm PyTorch extra-index URL when ROCm is detected. |
 | **Model path** | **`NEURONBOX_MODEL_DIR`** points at the resolved tree (store or local). **`NEURONBOX_MODEL_PATH`** when the manifest points at a single weights file. |
 | **Soft VRAM check** | If **`gpu.min_vram`** is set and the host reports GPU memory, **`neuron run`** can warn when estimates exceed what looks available (non-blocking). |
 | **Child environment** | Inherited **`PYTHONPATH`** is **removed** unless you set **`PYTHONPATH`** under **`env:`** in **`neuron.yaml`** (avoids IDE-injected paths breaking venv **numpy**/**torch**). |
@@ -138,7 +173,7 @@ Default socket: **`~/.neuronbox/neuron.sock`**, overridable with **`NEURONBOX_SO
 
 ### Automatic throughput detection
 
-When **`neuron run`** spawns your entrypoint, it sets **`NEURONBOX_AUTOHOOK=1`** and adds the **`sdk/`** package to **`PYTHONPATH`**. This installs lightweight hooks that **automatically report tok/s** for:
+When **`neuron run`** spawns your entrypoint, it sets **`NEURONBOX_AUTOHOOK=1`** and injects a valid SDK path into **`PYTHONPATH`** (`NEURONBOX_SDK`, local repo SDK, user SDK path, or bundled SDK extract). This installs lightweight hooks that **automatically report tok/s** for:
 
 | Framework | Hooked method |
 |-----------|---------------|
@@ -148,6 +183,8 @@ When **`neuron run`** spawns your entrypoint, it sets **`NEURONBOX_AUTOHOOK=1`**
 | **OpenAI client** | `Completions.create` (local endpoints) |
 
 The hooks measure **wall-clock time** and **output token count**, then push updates to the daemon. No code change required in your script.
+
+For `neuron serve` hot-swap flows, `swap_signal.json` can include **`resolved_model_dir`**. When present, workers should prefer it over `model_ref` so reloads stay local/store-aligned.
 
 For unsupported frameworks or custom pipelines, you can call **`neuronbox.DaemonClient().call("register_session", ...)`** with the same PID and an updated **`tokens_per_sec`** (see [specs/daemon-sessions.md](specs/daemon-sessions.md)).
 
@@ -195,7 +232,12 @@ Protocol types: **`runtime/src/protocol.rs`**.
 | `neuron` | Welcome screen |
 | `neuron help` | Full help |
 | `neuron init` | Create **`neuron.yaml`** in the current directory |
+| `neuron init --template NAME` | Create from template (`inference`, `finetune`, `local-model`) |
+| `neuron init --list-templates` | List available templates |
+| `neuron doctor` | Diagnostic checks for the NeuronBox environment |
+| `neuron doctor --strict` | Exit non-zero on any warning (for CI) |
 | `neuron pull <id>` | ML artifacts: HF-style **`org/model`**, configured **alias**, or **local path** → store |
+| `neuron pull <id> --revision SHA` | Pull a specific HF commit or tag |
 | `neuron run` | Run **`entrypoint`** from **`neuron.yaml`** (host by default) |
 | `neuron run -f FILE` | Use another manifest path |
 | `neuron run --gpu 0` | Sets **`CUDA_VISIBLE_DEVICES`** for the child |
@@ -210,14 +252,19 @@ Protocol types: **`runtime/src/protocol.rs`**.
 | `neuron host inspect` | JSON **HostSnapshot** |
 | `neuron gpu list` | Detected GPUs |
 | `neuron model list` | Store index |
+| `neuron model list --sizes` | Store index with disk usage |
+| `neuron model du` | Disk usage for all models |
+| `neuron model prune <id>` | Remove a model (dry-run by default) |
+| `neuron model prune <id> --execute` | Actually delete the model |
 | `neuron lock [-f FILE]` | Write **`requirements.lock`** into the hashed env (**`uv pip compile`**) |
 | `neuron daemon` | Run **`neurond`** in the foreground |
 | `neuron oci prepare` | Runc bundle (**Docker** on host for rootfs export) |
 | `neuron oci runc` | Run **`runc`** against a prepared bundle |
 
-### Breaking changes (older workflows)
+### Container note
 
-**`neuron pull`** is **not** for Docker image tags. **`neuron ps` / `stop` / `rm`** and **`neuron run`** as a generic **`docker run`** proxy are removed—use **`docker`** directly. NeuronBox keeps Docker under **`neuron oci …`** and **`neuron run --oci`** only.
+Use **`neuron pull`** for model artifacts (HF ids, aliases, local paths).  
+For container images, use **`docker pull`**, or NeuronBox OCI commands (**`neuron oci ...`**, **`neuron run --oci`**) when you want containerized project execution with NeuronBox mounts.
 
 ---
 
@@ -228,6 +275,10 @@ Protocol types: **`runtime/src/protocol.rs`**.
 | **`NEURONBOX_SOCKET`** | Unix socket path for **`neurond`** (default **`~/.neuronbox/neuron.sock`**) |
 | **`NEUROND_PATH`** | Path to **`neurond`** if not beside **`neuron`** |
 | **`HF_TOKEN`** | Authenticated Hub downloads for **`neuron pull`** |
+| **`NEURONBOX_SDK`** | Override path to the SDK directory (for auto-hooks) |
+| **`NEURONBOX_DISABLE_AUTOHOOK`** | `1` / `true` / `yes` — disable automatic throughput hooks |
+| **`NEURONBOX_HF_LAYOUT`** | `copy` (default) or `symlink` — how to store HF models (Unix only for symlink) |
+| **`NEURONBOX_METRICS_LOG`** | Path to NDJSON file for throughput metrics logging |
 | **`NEURONBOX_DEMO_SYNTHETIC_METRICS`** | `1` / `true` / `yes` — extra synthetic styling in dashboard (optional) |
 | **`NEURONBOX_DISABLE_VRAM_WATCH`** | Disables daemon VRAM watch path (e.g. demo spawn) |
 

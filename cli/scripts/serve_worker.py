@@ -68,22 +68,35 @@ def main() -> None:
                         time.sleep(1)
                         continue
                     print("[neuronbox serve] swap signal:", data, flush=True)
+
+                    # Prefer resolved_model_dir (local path) over model_ref (HF id)
+                    resolved_dir = data.get("resolved_model_dir")
                     ref = data.get("model_ref")
-                    if model is not None and ref:
+
+                    # Determine which path to use for loading
+                    load_path = None
+                    if resolved_dir and os.path.isdir(resolved_dir):
+                        load_path = resolved_dir
+                        print(f"[neuronbox serve] using resolved local path: {resolved_dir}", flush=True)
+                    elif ref:
+                        load_path = ref
+                        print(f"[neuronbox serve] using model_ref (may download from HF): {ref}", flush=True)
+
+                    if model is not None and load_path:
                         try:
                             from transformers import AutoModelForCausalLM, AutoTokenizer
                             import torch
 
-                            tok = AutoTokenizer.from_pretrained(ref, trust_remote_code=True)
+                            tok = AutoTokenizer.from_pretrained(load_path, trust_remote_code=True)
                             model = AutoModelForCausalLM.from_pretrained(
-                                ref,
+                                load_path,
                                 torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
                                 device_map="auto" if torch.cuda.is_available() else None,
                                 trust_remote_code=True,
                             )
-                            print("[neuronbox serve] reloaded from HF:", ref, flush=True)
+                            print(f"[neuronbox serve] model reloaded from: {load_path}", flush=True)
                         except Exception as e:
-                            print("[neuronbox serve] HF swap failed:", e, flush=True)
+                            print(f"[neuronbox serve] swap failed for {load_path}: {e}", flush=True)
             except (OSError, json.JSONDecodeError):
                 pass
         time.sleep(1)

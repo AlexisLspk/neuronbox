@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
@@ -43,24 +43,85 @@ env:
   BATCH_SIZE: "4"
 "#;
 
+/// Available templates in specs/examples/
+const AVAILABLE_TEMPLATES: &[&str] = &["inference", "finetune", "local-model"];
+
+/// Get the path to a template file.
+fn template_path(name: &str) -> Option<PathBuf> {
+    // Try relative to the binary (dev layout)
+    let exe = std::env::current_exe().ok()?;
+    let repo_root = exe.parent()?.parent()?.parent()?;
+    let template_file = repo_root
+        .join("specs/examples")
+        .join(format!("{}.yaml", name));
+    if template_file.exists() {
+        return Some(template_file);
+    }
+
+    // Try CARGO_MANIFEST_DIR (for tests)
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let template_file = manifest_dir
+        .join("../specs/examples")
+        .join(format!("{}.yaml", name));
+    if template_file.exists() {
+        return Some(template_file);
+    }
+
+    None
+}
+
+#[allow(dead_code)]
 pub fn init_interactive() -> Result<()> {
+    init_with_template(None)
+}
+
+pub fn init_with_template(template: Option<&str>) -> Result<()> {
     let cwd = std::env::current_dir()?;
     let yaml_path = cwd.join("neuron.yaml");
     if yaml_path.exists() {
         anyhow::bail!("neuron.yaml already exists in this directory.");
     }
-    std::fs::write(&yaml_path, TEMPLATE).with_context(|| format!("write {:?}", yaml_path))?;
+
+    let content = match template {
+        Some(name) => {
+            if let Some(path) = template_path(name) {
+                std::fs::read_to_string(&path)
+                    .with_context(|| format!("read template {:?}", path))?
+            } else {
+                anyhow::bail!(
+                    "Template '{}' not found. Available templates: {}",
+                    name,
+                    AVAILABLE_TEMPLATES.join(", ")
+                );
+            }
+        }
+        None => TEMPLATE.to_string(),
+    };
+
+    std::fs::write(&yaml_path, &content).with_context(|| format!("write {:?}", yaml_path))?;
 
     let _ = store_root();
     std::fs::create_dir_all(store_root()).ok();
 
     println!("Created {:?}.", yaml_path);
+    if let Some(t) = template {
+        println!("Template: {}", t);
+    }
     println!("Edit `model.name`, `entrypoint`, and `gpu.min_vram` for your machine.");
     println!("Global store: {:?}", store_root());
 
     // Validate generated YAML
     let _cfg: NeuronConfig = NeuronConfig::load_path(&yaml_path)?;
     Ok(())
+}
+
+/// List available templates.
+pub fn list_templates() {
+    println!("Available templates:");
+    for t in AVAILABLE_TEMPLATES {
+        println!("  - {}", t);
+    }
+    println!("\nUsage: neuron init --template <name>");
 }
 
 pub fn default_yaml_path() -> std::path::PathBuf {

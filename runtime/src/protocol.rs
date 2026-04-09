@@ -16,6 +16,8 @@ pub enum DaemonRequest {
         pid: u32,
         #[serde(default)]
         tokens_per_sec: Option<f64>,
+        #[serde(default)]
+        model_dir: Option<String>,
     },
     UnregisterSession {
         pid: u32,
@@ -84,4 +86,6 @@ pub struct SessionInfo {
     pub estimated_vram_mb: u64,
     #[serde(default)]
     pub tokens_per_sec: Option<f64>,
+    #[serde(default)]
+    pub model_dir: Option<String>,
 }

@@ -28,7 +28,7 @@ pub async fn stats() -> Result<()> {
                     "│ (no registered sessions)                                                 │"
                 );
             }
-            for s in sessions {
+            for s in &sessions {
                 let tok = s
                     .tokens_per_sec
                     .map(|t| format!("{t:.1}"))
@@ -48,6 +48,16 @@ pub async fn stats() -> Result<()> {
                 );
             }
             println!("└──────────────┴──────┴─────────┴─────────┴──────────────────────────────┘");
+            let mut any_path = false;
+            for s in &sessions {
+                if let Some(p) = &s.model_dir {
+                    if !any_path {
+                        println!("\nModel paths:");
+                        any_path = true;
+                    }
+                    println!("  {} (pid {}): {}", s.name, s.pid, p);
+                }
+            }
             if let Some(am) = active_model {
                 let q = am.quantization.as_deref().unwrap_or("(default)");
                 println!("\nActive model (swap): {} [{}]", am.model_ref, q);

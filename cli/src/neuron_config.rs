@@ -26,6 +26,9 @@ pub struct ModelSection {
     pub source: String,
     #[serde(default)]
     pub quantization: Option<String>,
+    /// HF commit SHA or tag to pin (e.g. "main", "v1.0", or a commit hash).
+    #[serde(default)]
+    pub revision: Option<String>,
 }
 
 fn default_hf() -> String {
@@ -37,6 +40,9 @@ pub struct RuntimeSection {
     pub python: String,
     #[serde(default)]
     pub cuda: Option<String>,
+    /// ROCm version for PyTorch index URL (e.g. "6.0"). Default: "6.0".
+    #[serde(default)]
+    pub rocm: Option<String>,
     #[serde(default)]
     pub packages: Vec<String>,
     /// `host` (default) or `oci` (Docker / runc per `container.executor`).

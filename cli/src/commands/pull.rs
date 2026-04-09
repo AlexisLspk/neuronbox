@@ -35,23 +35,41 @@ fn unsupported_pull_target(target: &str) -> anyhow::Error {
     )
 }
 
+/// Pull a model without revision (backward compatible).
 pub fn pull_model(target: &str) -> Result<()> {
+    pull_model_with_revision(target, None)
+}
+
+/// Pull a model with optional revision.
+pub fn pull_model_with_revision(target: &str, revision: Option<&str>) -> Result<()> {
     let store = store_root();
     std::fs::create_dir_all(&store).context("mkdir store")?;
 
     if target.starts_with("./") || target.starts_with('/') {
+        if revision.is_some() {
+            eprintln!("neuron: warning — --revision is ignored for local paths");
+        }
         return pull_local_path(Path::new(target));
     }
 
     let resolved = model_alias::resolve_for_hf_id(target);
     if looks_like_hf_repo(&resolved) {
         let token = std::env::var("HF_TOKEN").ok();
-        let path = model_store::ensure_hf_model(&store, &resolved, token.as_deref())
-            .with_context(|| format!("HF download {}", resolved))?;
+        let path = model_store::ensure_hf_model_with_revision(
+            &store,
+            &resolved,
+            token.as_deref(),
+            revision,
+        )
+        .with_context(|| format!("HF download {}", resolved))?;
         if resolved != target {
             println!("Alias {} → {}", target, resolved);
         }
-        println!("Model ready: {}", path.display());
+        if let Some(rev) = revision {
+            println!("Model ready (revision {}): {}", rev, path.display());
+        } else {
+            println!("Model ready: {}", path.display());
+        }
         return Ok(());
     }
 

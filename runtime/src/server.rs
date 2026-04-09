@@ -186,6 +186,7 @@ async fn dispatch(
             estimated_vram_mb,
             pid,
             tokens_per_sec,
+            model_dir,
         } => {
             gpu_manager
                 .register(SessionInfo {
@@ -193,6 +194,7 @@ async fn dispatch(
                     pid,
                     estimated_vram_mb,
                     tokens_per_sec,
+                    model_dir,
                 })
                 .await;
             DaemonResponse::Registered { pid }

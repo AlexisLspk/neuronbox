@@ -58,6 +58,7 @@ async fn run_unix(mut shutdown: watch::Receiver<bool>) -> Result<()> {
                 estimated_vram_mb: vram,
                 pid,
                 tokens_per_sec: Some(base),
+                model_dir: None,
             })
             .await
             .context("demo: initial register")?;
@@ -88,6 +89,7 @@ async fn run_unix(mut shutdown: watch::Receiver<bool>) -> Result<()> {
                     estimated_vram_mb: *vram,
                     pid: *pid,
                     tokens_per_sec: Some(tok),
+                    model_dir: None,
                 })
                 .await;
         }

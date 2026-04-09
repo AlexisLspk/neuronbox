@@ -14,6 +14,7 @@ pub fn env_dir_name(cfg: &NeuronConfig) -> String {
     let payload = serde_json::json!({
         "python": cfg.runtime.python,
         "cuda": cfg.runtime.cuda,
+        "rocm": cfg.runtime.rocm,
         "packages": cfg.runtime.packages,
     });
     let canonical = serde_json::to_string(&payload).unwrap_or_default();
@@ -81,7 +82,10 @@ pub fn ensure_python_env(env_root: &Path, cfg: &NeuronConfig) -> Result<PathBuf>
 
     let mut extra_index: Vec<String> = Vec::new();
     if has_rocm_gpu() {
-        extra_index.push("https://download.pytorch.org/whl/rocm6.0".to_string());
+        // Use runtime.rocm if specified, otherwise default to 6.0
+        // PyTorch uses rocm6.0 format in the URL
+        let rocm_tag = cfg.runtime.rocm.as_deref().unwrap_or("6.0");
+        extra_index.push(format!("https://download.pytorch.org/whl/rocm{rocm_tag}"));
     } else if use_cuda_pytorch_index(cfg) {
         let cuda = cfg
             .runtime

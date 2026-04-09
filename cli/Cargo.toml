@@ -11,16 +11,18 @@ categories.workspace = true
 authors.workspace = true
 
 [features]
-default = []
+default = ["bundled-sdk"]
 # Enable NVML in the runtime (Linux NVIDIA); little effect on macOS.
 nvml = ["neuronbox-runtime/nvml"]
+# Embed the Python SDK in the binary for extraction at runtime.
+bundled-sdk = ["include_dir"]
 
 [[bin]]
 name = "neuron"
 path = "src/main.rs"
 
 [dependencies]
-neuronbox-runtime = { version = "0.1.1", path = "../runtime" }
+neuronbox-runtime = { version = "1.0.1", path = "../runtime" }
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
 dirs = "5"
@@ -39,3 +41,7 @@ uuid = { version = "1", features = ["v4"] }
 which = "6"
 ratatui = "0.30.0"
 crossterm = "0.29.0"
+include_dir = { version = "0.7", optional = true }
+
+[dev-dependencies]
+tempfile = "3"

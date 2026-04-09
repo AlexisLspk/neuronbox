@@ -9,6 +9,7 @@ mod model_resolve;
 mod neuron_config;
 mod oci;
 mod paths;
+mod sdk_path;
 mod store;
 mod ui;
 
@@ -17,6 +18,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use commands::dashboard;
+use commands::doctor::{self, DoctorArgs};
 use commands::gpu_cmd::{self, GpuCommands};
 use commands::host_cmd::{self, HostCommands};
 use commands::init;
@@ -83,10 +85,28 @@ enum Commands {
         #[command(subcommand)]
         cmd: HostCommands,
     },
+    /// Diagnostic checks for the NeuronBox environment.
+    Doctor {
+        /// Exit with non-zero code on any warning (for CI).
+        #[arg(long)]
+        strict: bool,
+    },
     /// Create `neuron.yaml` in the current directory.
-    Init,
+    Init {
+        /// Use a template (inference, finetune, local-model).
+        #[arg(long)]
+        template: Option<String>,
+        /// List available templates.
+        #[arg(long)]
+        list_templates: bool,
+    },
     /// Download a model into the store (HF-style org/model, short alias, or local path).
-    Pull { model: String },
+    Pull {
+        model: String,
+        /// HF commit SHA or tag to pin (e.g. "main", "v1.0", or a commit hash).
+        #[arg(long)]
+        revision: Option<String>,
+    },
     /// Run the project (`neuron.yaml`), a single HF model id, or pass args to the entrypoint.
     Run {
         #[arg(long, short = 'f', value_name = "PATH")]
@@ -153,10 +173,23 @@ async fn main() -> Result<()> {
 
     match cli.command {
         None => welcome::run().map_err(anyhow::Error::from),
+        Some(Commands::Doctor { strict }) => doctor::doctor(DoctorArgs { strict }).await,
         Some(Commands::Gpu { cmd }) => gpu_cmd::gpu(cmd),
         Some(Commands::Host { cmd }) => host_cmd::host(cmd),
-        Some(Commands::Init) => init::init_interactive(),
-        Some(Commands::Pull { model }) => pull::pull_model(&model),
+        Some(Commands::Init {
+            template,
+            list_templates,
+        }) => {
+            if list_templates {
+                init::list_templates();
+                Ok(())
+            } else {
+                init::init_with_template(template.as_deref())
+            }
+        }
+        Some(Commands::Pull { model, revision }) => {
+            pull::pull_model_with_revision(&model, revision.as_deref())
+        }
         Some(Commands::Run {
             file,
             gpu,

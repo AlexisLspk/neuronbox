@@ -22,6 +22,10 @@
     "ts": {
       "type": "integer",
       "description": "Unix timestamp (seconds) when the file was written."
+    },
+    "resolved_model_dir": {
+      "type": ["string", "null"],
+      "description": "Resolved local path to model directory (from store or local filesystem). Added by CLI when resolution succeeds. Workers should prefer this over model_ref when present."
     }
   },
   "additionalProperties": true

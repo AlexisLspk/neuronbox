@@ -686,6 +686,7 @@ fn session_table_rows(
     slice: &[SessionInfo],
     v_eff: &HashMap<u32, u64>,
     name_max: usize,
+    path_max: usize,
     others_label: Option<(usize, u64, u64, f64)>,
 ) -> Vec<Row<'static>> {
     let mut rows: Vec<Row<'static>> = slice
@@ -709,6 +710,16 @@ fn session_table_rows(
                     truncate_name(&s.name, name_max),
                     theme::rt_command(),
                 )),
+                Cell::from(Span::styled(
+                    truncate_name(
+                        s.model_dir
+                            .as_deref()
+                            .filter(|p| !p.is_empty())
+                            .unwrap_or("—"),
+                        path_max,
+                    ),
+                    theme::rt_note(),
+                )),
                 Cell::from(Span::styled(s.pid.to_string(), theme::rt_pid())),
                 Cell::from(Span::styled(
                     format!("{}", s.estimated_vram_mb),
@@ -725,6 +736,7 @@ fn session_table_rows(
                 format!("Others ({n_rest})"),
                 theme::rt_warning(),
             )),
+            Cell::from(Span::styled("—", theme::rt_muted())),
             Cell::from(Span::styled("—", theme::rt_muted())),
             Cell::from(Span::styled(format!("{sum_est}"), theme::rt_metric_vram())),
             Cell::from(Span::styled(
@@ -783,6 +795,11 @@ fn render_sessions_summary(
         w if w < 30 => 8,
         _ => 14,
     };
+    let path_max = match area.width {
+        w if w < 40 => 8,
+        w if w < 55 => 12,
+        _ => 18,
+    };
 
     match stats_resp {
         Ok(DaemonResponse::Stats { sessions, .. }) if sessions.is_empty() => {
@@ -818,9 +835,10 @@ fn render_sessions_summary(
                 (ordered, None)
             };
 
-            let rows = session_table_rows(&top_slice, &v_eff, name_max, others_agg);
+            let rows = session_table_rows(&top_slice, &v_eff, name_max, path_max, others_agg);
             let header = Row::new(vec![
                 Cell::from(Span::styled("Name", theme::rt_command())),
+                Cell::from(Span::styled("Model path", theme::rt_note())),
                 Cell::from(Span::styled("PID", theme::rt_pid())),
                 Cell::from(Span::styled("Est.", theme::rt_metric_vram())),
                 Cell::from(Span::styled("NVIDIA", theme::rt_metric_vram_live())),
@@ -830,11 +848,12 @@ fn render_sessions_summary(
             let t = Table::new(
                 rows,
                 [
-                    Constraint::Percentage(30),
+                    Constraint::Percentage(22),
+                    Constraint::Percentage(24),
+                    Constraint::Percentage(10),
                     Constraint::Percentage(12),
                     Constraint::Percentage(14),
-                    Constraint::Percentage(16),
-                    Constraint::Percentage(28),
+                    Constraint::Percentage(18),
                 ],
             )
             .header(header)
@@ -908,9 +927,15 @@ fn render_sessions_fullscreen(
                 w if w < 50 => 16,
                 _ => 24,
             };
-            let rows = session_table_rows(&ordered, &v_eff, name_max, None);
+            let path_max = match parts[1].width {
+                w if w < 60 => 18,
+                w if w < 90 => 30,
+                _ => 42,
+            };
+            let rows = session_table_rows(&ordered, &v_eff, name_max, path_max, None);
             let header = Row::new(vec![
                 Cell::from(Span::styled("Name", theme::rt_command())),
+                Cell::from(Span::styled("Model path", theme::rt_note())),
                 Cell::from(Span::styled("PID", theme::rt_pid())),
                 Cell::from(Span::styled("Est.", theme::rt_metric_vram())),
                 Cell::from(Span::styled("NVIDIA", theme::rt_metric_vram_live())),
@@ -920,11 +945,12 @@ fn render_sessions_fullscreen(
             let t = Table::new(
                 rows,
                 [
-                    Constraint::Percentage(30),
+                    Constraint::Percentage(18),
+                    Constraint::Percentage(34),
+                    Constraint::Percentage(8),
+                    Constraint::Percentage(10),
                     Constraint::Percentage(12),
-                    Constraint::Percentage(14),
-                    Constraint::Percentage(16),
-                    Constraint::Percentage(28),
+                    Constraint::Percentage(18),
                 ],
             )
             .header(header)

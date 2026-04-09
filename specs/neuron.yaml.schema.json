@@ -23,9 +23,14 @@
             "path",
             "filesystem",
             "disk"
-          ]
+          ],
+          "description": "Model source. 's3' is not yet implemented — use rclone/s3fs mount + 'local' as a workaround."
         },
-        "quantization": { "type": ["string", "null"] }
+        "quantization": { "type": ["string", "null"] },
+        "revision": {
+          "type": ["string", "null"],
+          "description": "HF commit SHA or tag to pin (e.g. 'main', 'v1.0', or a commit hash)"
+        }
       }
     },
     "runtime": {
@@ -35,6 +40,10 @@
         "python": { "type": "string" },
         "mode": { "type": "string", "enum": ["host", "oci"] },
         "cuda": { "type": ["string", "null"] },
+        "rocm": {
+          "type": ["string", "null"],
+          "description": "ROCm version for PyTorch index URL (e.g. '6.0'). Default: '6.0'."
+        },
         "packages": {
           "type": "array",
           "items": { "type": "string" }

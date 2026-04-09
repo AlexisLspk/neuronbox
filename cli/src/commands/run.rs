@@ -6,7 +6,7 @@ use neuronbox_runtime::host::HostProbe;
 use neuronbox_runtime::protocol::DaemonRequest;
 
 use crate::commands::init::default_yaml_path;
-use crate::commands::pull::{looks_like_hf_repo, pull_model};
+use crate::commands::pull::{looks_like_hf_repo, pull_model, pull_model_with_revision};
 use crate::daemon_client;
 use crate::daemon_spawn;
 use crate::env_hash;
@@ -15,6 +15,7 @@ use crate::model_resolve::{self, use_local_filesystem};
 use crate::neuron_config::NeuronConfig;
 use crate::oci;
 use crate::paths::{neuronbox_home, project_dir_from_yaml, store_root};
+use crate::sdk_path;
 
 pub struct RunArgs {
     pub yaml: Option<PathBuf>,
@@ -32,18 +33,48 @@ fn pytorch_alloc_env(cfg: &NeuronConfig) -> Option<String> {
     })
 }
 
-/// Path to the SDK `neuronbox` package (for auto-hooks via PYTHONPATH).
-fn sdk_neuronbox_path() -> Option<PathBuf> {
-    // sdk/neuronbox relative to the CLI binary's parent (repo layout)
-    let exe = std::env::current_exe().ok()?;
-    // target/debug/neuron -> repo root is ../../
-    let repo_root = exe.parent()?.parent()?.parent()?;
-    let sdk_path = repo_root.join("sdk");
-    if sdk_path.join("neuronbox").join("_hooks.py").exists() {
-        return Some(sdk_path);
+/// Warn if gpu.strategy suggests multi-GPU but only one GPU is visible.
+fn gpu_strategy_warning(cfg: &NeuronConfig, gpu_devices: Option<&str>) -> Option<String> {
+    let strategy = cfg.gpu.strategy.to_lowercase();
+    if strategy != "pipeline" && strategy != "tensor" {
+        return None;
     }
-    // Fallback: installed SDK via pip (user should have it on PYTHONPATH already)
+
+    // Count visible GPUs from CUDA_VISIBLE_DEVICES or --gpu flag
+    let visible_count = match gpu_devices.or_else(|| {
+        std::env::var("CUDA_VISIBLE_DEVICES")
+            .ok()
+            .as_deref()
+            .map(|_| "")
+    }) {
+        Some(devices) if !devices.is_empty() => {
+            // Parse comma-separated device IDs
+            devices.split(',').filter(|s| !s.trim().is_empty()).count()
+        }
+        _ => {
+            // No explicit device selection, check actual GPU count
+            let snap = HostProbe::snapshot();
+            snap.gpus.len()
+        }
+    };
+
+    if visible_count <= 1 {
+        return Some(format!(
+            "gpu.strategy: {} typically expects multiple GPUs, but {} GPU(s) are visible. See docs/MULTI_GPU.md for torchrun/DDP setup.",
+            cfg.gpu.strategy, visible_count
+        ));
+    }
     None
+}
+
+fn ask_confirmation(prompt: &str) -> Result<bool> {
+    use std::io::{self, Write};
+    print!("{prompt} [y/N]: ");
+    io::stdout().flush().ok();
+    let mut s = String::new();
+    io::stdin().read_line(&mut s)?;
+    let a = s.trim().to_ascii_lowercase();
+    Ok(matches!(a.as_str(), "y" | "yes"))
 }
 
 /// `neuron run` with `neuron.yaml` in the current directory.
@@ -57,15 +88,32 @@ pub async fn run_project(args: RunArgs) -> Result<()> {
 
     let hf_repo_id = model_alias::resolve_for_hf_id(&cfg.model.name);
     if !use_local_filesystem(&cfg) {
-        pull_model(&hf_repo_id)?;
+        pull_model_with_revision(&hf_repo_id, cfg.model.revision.as_deref())?;
     }
 
+    let mut pre_run_warnings: Vec<String> = Vec::new();
     if let Some(req) = cfg.min_vram_mb() {
         let snap = HostProbe::snapshot();
         if let Some(avail) = snap.primary_vram_mb() {
             if avail > 0 {
-                soft_vram_check(avail, req, &cfg.name).map_err(anyhow::Error::msg)?;
+                if let Err(msg) = soft_vram_check(avail, req, &cfg.name) {
+                    pre_run_warnings.push(msg);
+                }
             }
+        }
+    }
+
+    if let Some(w) = gpu_strategy_warning(&cfg, args.gpu_devices.as_deref()) {
+        pre_run_warnings.push(w);
+    }
+
+    if !pre_run_warnings.is_empty() {
+        eprintln!("\nneuron: pre-run checks found potential issues:");
+        for w in &pre_run_warnings {
+            eprintln!("\n{w}\n");
+        }
+        if !ask_confirmation("Continue anyway and start the run?")? {
+            anyhow::bail!("run cancelled by user after pre-run checks");
         }
     }
 
@@ -165,16 +213,20 @@ pub async fn run_project(args: RunArgs) -> Result<()> {
     cmd.env("NEURONBOX_SESSION_VRAM_MB", format!("{est_mb}"));
 
     // Enable automatic throughput hooks for ML frameworks
-    cmd.env("NEURONBOX_AUTOHOOK", "1");
-    if let Some(sdk_path) = sdk_neuronbox_path() {
-        // Prepend SDK to PYTHONPATH so hooks are available
-        let existing = std::env::var("PYTHONPATH").unwrap_or_default();
-        let new_pythonpath = if existing.is_empty() {
-            sdk_path.display().to_string()
-        } else {
-            format!("{}:{}", sdk_path.display(), existing)
-        };
-        cmd.env("PYTHONPATH", new_pythonpath);
+    if !sdk_path::autohook_disabled() {
+        cmd.env("NEURONBOX_AUTOHOOK", "1");
+        if let Some(sdk) = sdk_path::get_sdk_path() {
+            // Prepend SDK to PYTHONPATH so hooks are available
+            let existing = std::env::var("PYTHONPATH").unwrap_or_default();
+            let new_pythonpath = if existing.is_empty() {
+                sdk.display().to_string()
+            } else {
+                format!("{}:{}", sdk.display(), existing)
+            };
+            cmd.env("PYTHONPATH", new_pythonpath);
+        } else if !cfg.env.contains_key("PYTHONPATH") {
+            cmd.env_remove("PYTHONPATH");
+        }
     } else if !cfg.env.contains_key("PYTHONPATH") {
         cmd.env_remove("PYTHONPATH");
     }
@@ -191,6 +243,7 @@ pub async fn run_project(args: RunArgs) -> Result<()> {
         estimated_vram_mb: est_mb,
         pid,
         tokens_per_sec: None,
+        model_dir: Some(model_dir.display().to_string()),
     })
     .await
     {
